@@ -32,6 +32,11 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     env_file: .env
+    volumes:
+      # Bind-mounts for hot reload in dev. uvicorn --reload picks up changes.
+      - ./backend/src:/app/src
+      - ./backend/alembic:/app/alembic
+      - ./backend/alembic.ini:/app/alembic.ini
     depends_on:
       postgres:
         condition: service_healthy
