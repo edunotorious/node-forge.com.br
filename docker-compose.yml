@@ -1,0 +1,79 @@
+# Node-Forge — local development orchestration.
+# Current state: PLACEHOLDER (Phase 1).
+# Each service is declared here with its intended final shape; the matching
+# Dockerfiles will be added in the phases noted below. `docker compose up`
+# does not work until at least Phase 4 (postgres + backend + frontend) lands.
+
+services:
+  postgres:
+    # Used from Phase 2 onward (backend skeleton + migrations).
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-nodeforge}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-net
+
+  backend:
+    # Implemented in Phase 2.
+    # Bridges app-net and executor-net: the backend is the only service
+    # allowed to reach the executor.
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    networks:
+      - app-net
+      - executor-net
+
+  executor:
+    # Implemented in Phase 7.
+    # WARNING: mounts /var/run/docker.sock — root-equivalent on the host.
+    # Dev only. Isolated on executor-net so the frontend cannot reach it.
+    build:
+      context: ./executor
+      dockerfile: Dockerfile
+    env_file: .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # ports:
+    #   - "8001:8001"  # uncomment only for isolated debugging of the executor
+    networks:
+      - executor-net
+
+  frontend:
+    # Implemented in Phase 4.
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    env_file: .env
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    networks:
+      - app-net
+
+networks:
+  app-net:
+    driver: bridge
+  executor-net:
+    driver: bridge
+
+volumes:
+  pg_data:

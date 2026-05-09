@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# uv
+.uv/
+uv-cache/
+
+# Node / Next.js
+node_modules/
+.pnpm-store/
+.next/
+out/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# Env files (manter apenas .env.example versionado)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / build
+*.log
+.docker/
