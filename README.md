@@ -33,12 +33,20 @@ infraestrutura local via Docker Compose. O domínio público alvo é
 
 ## Rodando localmente
 
+Até a Phase 7 (executor isolado), o comando padrão sobe apenas
+`postgres + backend + frontend`. O serviço `executor` está marcado com
+`profiles: ["executor"]` e só entra na composição quando você passa
+`--profile executor` explicitamente.
+
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose up -d --build
 
 # em outra aba, depois que o postgres ficar healthy:
 docker compose exec backend uv run alembic upgrade head
+
+# Phase 7+ — quando o executor estiver implementado:
+docker compose --profile executor up -d --build
 ```
 
 Endpoints:
