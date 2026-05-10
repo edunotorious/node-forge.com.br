@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     executor_timeout_seconds: int = 30
     cors_origins: str = "http://localhost:3000"
     internal_api_token: str
+    # Cookie `Secure` flag for the auth cookie. True in production. Browsers
+    # grant a localhost exception so True works for browser dev too, but curl
+    # over plain HTTP refuses to send Secure cookies — set False in .env when
+    # exercising endpoints with curl/cookies.txt.
+    cookie_secure: bool = True
 
 
 @lru_cache
