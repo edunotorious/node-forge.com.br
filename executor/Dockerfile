@@ -25,6 +25,11 @@ RUN uv pip install --system .
 
 COPY src ./src
 
+# Runner-mode scratch dir. The executor reuses this same image for each
+# ephemeral runner container; user code lands at /work/script.py with
+# `nobody` owning the dir so the runner can drop root via `user=nobody`.
+RUN mkdir -p /work && chown nobody:nogroup /work && chmod 1777 /work
+
 EXPOSE 8001
 
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001"]

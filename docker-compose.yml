@@ -47,16 +47,27 @@ services:
       - executor-net
 
   executor:
-    # Phase 7 v1: runs user Python via `subprocess.run` inside this same
-    # container. The docker.sock mount and ephemeral-container architecture
-    # described in the README are deferred to a later hardening pass —
-    # documented in the executor's main.py docstring with the v1 trade-offs.
+    # Phase 7 v2: spawns one ephemeral container per /run via the docker
+    # daemon (docker.sock mounted from host). The runner image is this same
+    # image reused — qiskit, qiskit-aer, matplotlib are baked in.
+    #
+    # WARNING: mounting docker.sock gives this container root-equivalent
+    # access to the host docker daemon. Acceptable in dev, NOT for shared
+    # servers or production without a real sandbox (gVisor, Firecracker,
+    # rootless docker, or a dedicated VM per run).
+    #
     # Reachable ONLY on executor-net (no host port published); the backend
     # is the sole client.
     build:
       context: ./executor
       dockerfile: Dockerfile
     env_file: .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # The ephemeral runner is the same image this service runs from. If
+      # you split a smaller runner image later, override this in .env.
+      RUNNER_IMAGE: node-forge-executor:latest
     # ports:
     #   - "8001:8001"  # uncomment only for isolated debugging of the executor
     healthcheck:

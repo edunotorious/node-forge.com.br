@@ -8,10 +8,14 @@ dependencies = [
     "uvicorn[standard]>=0.32.0,<0.33",
     "pydantic>=2.9.0,<3",
     "pydantic-settings>=2.5.0,<3",
-    # User-code dependencies — these live in the executor image because v1
-    # runs scripts via subprocess inside this container (no separate runner
-    # image yet). When we swap to docker.sock + ephemeral containers, these
-    # move into a `runner` image and this list shrinks back to just FastAPI.
+    # docker SDK is how the executor talks to the host daemon (via the
+    # mounted /var/run/docker.sock) to spawn one ephemeral runner container
+    # per /run request.
+    "docker>=7.1.0,<8",
+    # User-code dependencies — bundled into this image because the runner
+    # *is* this same image (reused via the docker daemon). Splitting into a
+    # smaller runner-only image is a follow-up: would shrink each ephemeral
+    # container's startup time and let us run multiple sandbox flavors.
     "qiskit>=1.2.0,<2",
     "qiskit-aer>=0.15.0,<1",
     "matplotlib>=3.9.0,<4",
