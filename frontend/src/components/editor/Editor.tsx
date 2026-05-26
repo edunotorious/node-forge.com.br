@@ -117,10 +117,15 @@ export function Editor({ initial }: EditorProps) {
   const setIsRunning = useEditor((s) => s.setIsRunning);
   const setBottomTab = useEditor((s) => s.setBottomTab);
 
-  // Execute the active file: persist pending edits, POST to the runner, and
-  // park the response in `lastJob` so the Console tab can render it. v1 is
-  // sync (the server blocks until the executor finishes); the Console tab
-  // is auto-switched to so the result is immediately visible.
+  // Execute the active file:
+  //  1. Persist pending edits (flushSave).
+  //  2. POST /run — backend returns 202 + the queued job synchronously and
+  //     drives the executor in a background task.
+  //  3. Poll GET /jobs/{id} until status is terminal, updating `lastJob`
+  //     each tick so ConsoleView re-renders progressively.
+  //
+  // Polling caps at MAX_POLL_MS of wall time as a defence against a stuck
+  // job — the executor's own timeout normally lands well before this.
   const runFile = useCallback(async () => {
     const state = useEditor.getState();
     if (!state.projectId || !state.fileId || state.isRunning) return;
@@ -136,8 +141,24 @@ export function Editor({ initial }: EditorProps) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail ?? `HTTP ${res.status}`);
       }
-      const job: ExecutionJob = await res.json();
+      let job: ExecutionJob = await res.json();
       setLastJob(job);
+
+      const startedAt = Date.now();
+      const MAX_POLL_MS = 90_000;
+      const POLL_INTERVAL_MS = 500;
+      while (
+        (job.status === "queued" || job.status === "running") &&
+        Date.now() - startedAt < MAX_POLL_MS
+      ) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        const pollRes = await fetch(`/api/jobs/${job.id}`);
+        if (!pollRes.ok) {
+          throw new Error(`poll HTTP ${pollRes.status}`);
+        }
+        job = await pollRes.json();
+        setLastJob(job);
+      }
     } catch (err) {
       toast.error(t("run.failed"));
       console.error("run failed", err);
