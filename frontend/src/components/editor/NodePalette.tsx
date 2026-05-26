@@ -1,18 +1,31 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
+import { cn } from "@/lib/utils";
+
 import { PALETTE_GROUPS } from "./nodes";
 
-export function NodePalette() {
+// `embedded` (default): rendered inside the LeftPanel's "Details" tab — no
+// outer aside, no width. Pass `embedded={false}` to use this component as a
+// standalone sidebar (kept for flexibility; no current callers).
+export function NodePalette({ embedded = true }: { embedded?: boolean }) {
+  const t = useTranslations("editor.palette");
+  const Wrapper = embedded ? "div" : "aside";
   return (
-    <aside className="w-[240px] shrink-0 overflow-y-auto border-r bg-muted/30 p-3">
+    <Wrapper
+      className={cn(
+        !embedded && "w-[240px] shrink-0 overflow-y-auto border-r bg-muted/30 p-3",
+      )}
+    >
       <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Paleta
+        {t("title")}
       </h2>
       <div className="space-y-4">
         {PALETTE_GROUPS.map((group) => (
-          <div key={group.label}>
+          <div key={group.labelKey}>
             <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              {group.label}
+              {t(`groups.${group.labelKey}`)}
             </div>
             <div className="space-y-1">
               {group.items.map((item) => (
@@ -35,6 +48,6 @@ export function NodePalette() {
           </div>
         ))}
       </div>
-    </aside>
+    </Wrapper>
   );
 }

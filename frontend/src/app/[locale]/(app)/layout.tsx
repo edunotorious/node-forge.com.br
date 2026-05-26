@@ -1,4 +1,4 @@
-import { Nav } from "@/components/nav";
+import { TopBar } from "@/components/top-bar";
 import { requireUser } from "@/lib/server-api";
 
 export default async function AppLayout({
@@ -9,7 +9,7 @@ export default async function AppLayout({
   const user = await requireUser();
   return (
     <div className="flex flex-1 flex-col">
-      <Nav user={user} />
+      <TopBar user={user} />
       <main className="flex-1">{children}</main>
     </div>
   );

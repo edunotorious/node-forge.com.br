@@ -46,9 +46,14 @@ export function defaultDataFor(type: string): Record<string, unknown> {
   }
 }
 
-export const PALETTE_GROUPS: { label: string; items: { type: string; label: string }[] }[] = [
+// Group labels are translation keys under `editor.palette.groups`; item labels
+// are technical names that stay in English across locales.
+export const PALETTE_GROUPS: {
+  labelKey: "singleQubit" | "twoQubits" | "measurement" | "execution";
+  items: { type: string; label: string }[];
+}[] = [
   {
-    label: "Gates de 1 qubit",
+    labelKey: "singleQubit",
     items: [
       { type: NODE_TYPES.HADAMARD, label: "Hadamard (H)" },
       { type: NODE_TYPES.PAULI_X, label: "Pauli-X" },
@@ -57,18 +62,18 @@ export const PALETTE_GROUPS: { label: string; items: { type: string; label: stri
     ],
   },
   {
-    label: "Gates de 2 qubits",
+    labelKey: "twoQubits",
     items: [{ type: NODE_TYPES.CNOT, label: "CNOT" }],
   },
   {
-    label: "Medição e estrutura",
+    labelKey: "measurement",
     items: [
       { type: NODE_TYPES.MEASURE, label: "Measure" },
       { type: NODE_TYPES.BARRIER, label: "Barrier" },
     ],
   },
   {
-    label: "Execução e visualização",
+    labelKey: "execution",
     items: [
       { type: NODE_TYPES.RUN_LOCAL_SIMULATOR, label: "Run (Aer Simulator)" },
       { type: NODE_TYPES.PLOT_HISTOGRAM, label: "Plot Histogram" },

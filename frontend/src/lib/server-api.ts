@@ -1,8 +1,10 @@
 import "server-only";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { getLocale } from "next-intl/server";
 import { cache } from "react";
+
+import { redirect } from "@/i18n/navigation";
 
 const BACKEND = process.env.BACKEND_INTERNAL_URL ?? "http://backend:8000";
 const TOKEN = process.env.INTERNAL_API_TOKEN ?? "";
@@ -21,12 +23,26 @@ export interface Project {
   updated_at: string;
 }
 
-export interface ProjectFull extends Project {
+export interface ProjectFileSummary {
+  id: string;
+  name: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectFileFull extends ProjectFileSummary {
   graph_json: {
     nodes: unknown[];
     edges: unknown[];
     config: { num_qubits: number; num_classical: number; shots: number };
+    variables?: unknown[];
+    functions?: unknown[];
   };
+}
+
+export interface ProjectFull extends Project {
+  files: ProjectFileSummary[];
 }
 
 async function backendFetch(path: string, init?: RequestInit) {
@@ -51,7 +67,13 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
 // proxy.ts is UX only, not a security boundary.
 export async function requireUser(): Promise<User> {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) {
+    // next-intl's `redirect` returns `never`, but TS does not narrow through
+    // the createNavigation object literal. The throw is unreachable but
+    // satisfies the type checker.
+    redirect({ href: "/login", locale: await getLocale() });
+    throw new Error("unreachable");
+  }
   return user;
 }
 
@@ -63,6 +85,15 @@ export async function listServerProjects(): Promise<Project[]> {
 
 export async function getServerProject(id: string): Promise<ProjectFull | null> {
   const res = await backendFetch(`/projects/${id}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function getServerProjectFile(
+  projectId: string,
+  fileId: string,
+): Promise<ProjectFileFull | null> {
+  const res = await backendFetch(`/projects/${projectId}/files/${fileId}`);
   if (!res.ok) return null;
   return res.json();
 }

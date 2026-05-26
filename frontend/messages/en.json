@@ -1,0 +1,277 @@
+{
+  "common": {
+    "logout": "Logout"
+  },
+  "nav": {
+    "nodeVault": "Node Vault",
+    "nodeVaultComingSoon": "Coming soon",
+    "projects": "Projects",
+    "profileAria": "Open profile",
+    "languageSwitcherAria": "Switch language"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "description": "Sign in to open your projects.",
+      "email": "Email",
+      "password": "Password",
+      "submit": "LOGIN",
+      "submitting": "Signing in...",
+      "registerCta": "New User",
+      "forgotPassword": "Forgot your password?",
+      "forgotPasswordComingSoon": "Coming soon",
+      "errors": {
+        "invalidEmail": "Invalid email",
+        "passwordRequired": "Enter your password",
+        "loginFailed": "Login failed"
+      }
+    },
+    "register": {
+      "title": "Create account",
+      "description": "Sign up to start using Node-Forge.",
+      "email": "Email",
+      "password": "Password",
+      "passwordHint": "Minimum 12 characters.",
+      "submit": "Create account",
+      "submitting": "Creating...",
+      "hasAccount": "Already have an account?",
+      "loginCta": "Sign in",
+      "errors": {
+        "invalidEmail": "Invalid email",
+        "passwordMin": "Password must be at least 12 characters",
+        "passwordMax": "Maximum 72 characters",
+        "registerFailed": "Failed to create account"
+      }
+    }
+  },
+  "projects": {
+    "title": "Projects",
+    "createTileAria": "Create new project",
+    "newDialog": {
+      "title": "New project",
+      "description": "Give your new circuit a name.",
+      "name": "Name",
+      "nameRequired": "Enter a name",
+      "descriptionField": "Description (optional)",
+      "submit": "Create"
+    },
+    "empty": {
+      "message": "You don't have any projects yet. Click the orange tile to create your first."
+    },
+    "card": {
+      "openAria": "Open project {name}",
+      "untitled": "Untitled"
+    },
+    "contextMenu": {
+      "rename": "Rename",
+      "changeImage": "Change Project Image",
+      "duplicate": "Duplicate",
+      "delete": "Delete Project",
+      "comingSoon": "Coming soon"
+    },
+    "renameDialog": {
+      "title": "Rename project",
+      "name": "Name",
+      "nameRequired": "Enter a name",
+      "submit": "Save",
+      "submitting": "Saving..."
+    },
+    "deleteDialog": {
+      "title": "Delete project?",
+      "description": "This cannot be undone. The project and its entire graph will be permanently removed.",
+      "cancel": "Cancel",
+      "confirm": "Delete",
+      "confirming": "Deleting..."
+    },
+    "toast": {
+      "createFailed": "Failed to create project",
+      "created": "Project created",
+      "deleteFailed": "Failed to delete project",
+      "deleted": "Project deleted",
+      "listFailed": "Failed to load projects",
+      "renameFailed": "Failed to rename project",
+      "renamed": "Project renamed"
+    }
+  },
+  "editor": {
+    "backToProjects": "Back to projects",
+    "projectNamePlaceholder": "Project name",
+    "save": "Save",
+    "run": "Run",
+    "runDisabledTooltip": "Available in Phase 7",
+    "autosaveFailed": "Failed to save project",
+    "status": {
+      "saving": "Saving...",
+      "saveError": "Save failed",
+      "savedAt": "Saved at {time}",
+      "unsaved": "Unsaved changes",
+      "idle": "—"
+    },
+    "palette": {
+      "title": "Palette",
+      "groups": {
+        "singleQubit": "1-qubit gates",
+        "twoQubits": "2-qubit gates",
+        "measurement": "Measurement & structure",
+        "execution": "Execution & visualization"
+      }
+    },
+    "tabs": {
+      "details": "Details",
+      "classes": "Classes",
+      "inspect": "Inspect",
+      "console": "Console",
+      "terminal": "Terminal",
+      "imports": "Imports"
+    },
+    "classesPlaceholder": "Class definitions will live here (future phase).",
+    "details": {
+      "paletteSection": "Palette",
+      "variables": "Variables",
+      "functions": "Functions",
+      "addVariable": "Add Variable",
+      "addFunction": "Add function",
+      "emptyVariables": "No variables defined.",
+      "emptyFunctions": "No functions defined.",
+      "removeAria": "Remove"
+    },
+    "variableDialog": {
+      "title": "New variable",
+      "name": "Name",
+      "namePlaceholder": "e.g. my_var, _hidden, MY_CONST",
+      "type": "Type",
+      "value": "Initial value (optional)",
+      "submit": "Add",
+      "nameRequired": "Enter a name",
+      "nameInvalid": "Invalid name (letters, digits and _)",
+      "duplicateName": "A variable with that name already exists"
+    },
+    "functionDialog": {
+      "title": "New function",
+      "name": "Name",
+      "namePlaceholder": "e.g. my_func",
+      "returnType": "Returns",
+      "body": "Body (Python)",
+      "bodyPlaceholder": "return ...",
+      "submit": "Add",
+      "nameRequired": "Enter a name",
+      "nameInvalid": "Invalid name (letters, digits and _)",
+      "duplicateName": "A function with that name already exists"
+    },
+    "terminal": {
+      "banner": "Terminal will be wired to the executor in Phase 7. The input below is visual only for now.",
+      "prompt": ">",
+      "inputAria": "Terminal command"
+    },
+    "imports": {
+      "nodeImports": "Node Imports",
+      "pythonPackages": "Python Packages",
+      "author": "Author:",
+      "description": "Description:",
+      "version": "Version:"
+    },
+    "runControls": {
+      "play": "Run",
+      "pause": "Pause",
+      "stop": "Stop",
+      "comingSoon": "Coming soon",
+      "running": "Running..."
+    },
+    "console": {
+      "empty": "No runs yet. Click ▶ to execute the circuit.",
+      "running": "Running…",
+      "exitOk": "Done",
+      "exitFailed": "Failed",
+      "exitTimeout": "Timeout",
+      "exitError": "System error",
+      "stdout": "stdout",
+      "stderr": "stderr",
+      "artifacts": "Artifacts",
+      "elapsed": "Time: {ms}ms"
+    },
+    "run": {
+      "failed": "Run failed"
+    },
+    "files": {
+      "addAria": "Add new file",
+      "newFileDialogTitle": "New file",
+      "name": "File name",
+      "namePlaceholder": "e.g. File 2",
+      "nameRequired": "Enter a name",
+      "submit": "Create",
+      "submitting": "Creating...",
+      "switchFailed": "Failed to open file",
+      "createFailed": "Failed to create file",
+      "created": "File created"
+    },
+    "properties": {
+      "circuitConfig": "Circuit config",
+      "qubits": "Qubits",
+      "classicalBits": "Classical bits",
+      "defaultShots": "Default shots",
+      "selectedNode": "Selected node",
+      "emptySelection": "Click a node on the canvas to view/edit its properties.",
+      "type": "Type:",
+      "id": "id:"
+    }
+  },
+  "profile": {
+    "changeAvatarComingSoon": "Coming soon",
+    "userSettings": {
+      "title": "User Settings",
+      "username": "Username:",
+      "email": "Email",
+      "password": "Password:",
+      "changeUsername": "Change Username",
+      "changeEmail": "Change Email",
+      "changePassword": "Change Password",
+      "usernameComingSoon": "Coming soon",
+      "passwordMasked": "*********"
+    },
+    "vaultProfile": {
+      "title": "Vault profile",
+      "name": "Name:",
+      "bio": "Bio:",
+      "yourSite": "Your site:",
+      "socialAccounts": "Social accounts:",
+      "country": "Country",
+      "email": "Email:",
+      "showEmail": "Show email on profile",
+      "comingSoon": "Coming soon"
+    },
+    "changeEmail": {
+      "title": "Change email",
+      "currentPassword": "Current password",
+      "newEmail": "New email",
+      "submit": "Save",
+      "submitting": "Saving...",
+      "errors": {
+        "passwordRequired": "Enter your current password",
+        "invalidEmail": "Invalid email"
+      }
+    },
+    "changePassword": {
+      "title": "Change password",
+      "currentPassword": "Current password",
+      "newPassword": "New password",
+      "newPasswordHint": "Minimum 12 characters.",
+      "submit": "Save",
+      "submitting": "Saving...",
+      "errors": {
+        "passwordRequired": "Enter your current password",
+        "newPasswordMin": "Password must be at least 12 characters",
+        "newPasswordMax": "Maximum 72 characters"
+      }
+    },
+    "toast": {
+      "emailChanged": "Email updated",
+      "emailChangeFailed": "Failed to update email",
+      "passwordChanged": "Password updated",
+      "passwordChangeFailed": "Failed to update password"
+    }
+  },
+  "metadata": {
+    "title": "Node-Forge",
+    "description": "Visual IDE for quantum computing."
+  }
+}

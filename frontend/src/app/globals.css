@@ -8,9 +8,12 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --color-nav: var(--nav);
+  --color-nav-foreground: var(--nav-foreground);
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-serif: var(--font-roboto-slab);
+  --font-heading: var(--font-roboto-slab);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,39 +52,51 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Node-Forge brand tokens (light theme).
+ *
+ *   Navy   #0C1532   top bar, headings, dark surfaces
+ *   Orange #F08230   primary CTA, section headers, accents
+ *   Bg     #E8E8E8   page background
+ *   Card   #FFFFFF   card surface
+ *
+ * Hex equivalents are noted next to each oklch() so you can roundtrip if a
+ * designer asks for "what's the brand orange in hex" without re-converting.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --background: oklch(0.93 0 0);              /* #E8E8E8 page bg */
+  --foreground: oklch(0.18 0.04 270);         /* #0C1532 navy text */
+  --card: oklch(1 0 0);                       /* #FFFFFF */
+  --card-foreground: oklch(0.18 0.04 270);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  --popover-foreground: oklch(0.18 0.04 270);
+  --primary: oklch(0.71 0.156 51);            /* #F08230 brand orange */
+  --primary-foreground: oklch(1 0 0);         /* white text on orange */
   --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --secondary-foreground: oklch(0.18 0.04 270);
+  --muted: oklch(0.95 0 0);
+  --muted-foreground: oklch(0.5 0.02 270);
+  --accent: oklch(0.71 0.156 51 / 12%);       /* orange tint for hover/accent */
+  --accent-foreground: oklch(0.18 0.04 270);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
+  --border: oklch(0.85 0 0);
+  --input: oklch(0.88 0 0);
+  --ring: oklch(0.71 0.156 51);               /* focus ring is brand orange */
+  --nav: oklch(0.18 0.04 270);                /* #0C1532 navy top bar */
+  --nav-foreground: oklch(0.98 0 0);          /* near-white on navy */
+  --chart-1: oklch(0.71 0.156 51);
+  --chart-2: oklch(0.18 0.04 270);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: oklch(0.97 0 0);
+  --sidebar-foreground: oklch(0.18 0.04 270);
+  --sidebar-primary: oklch(0.71 0.156 51);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.71 0.156 51 / 12%);
+  --sidebar-accent-foreground: oklch(0.18 0.04 270);
+  --sidebar-border: oklch(0.85 0 0);
+  --sidebar-ring: oklch(0.71 0.156 51);
 }
 
 .dark {

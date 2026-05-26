@@ -37,3 +37,21 @@ class UserResponse(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class EmailChangeRequest(BaseModel):
+    # Current password is required even though the user is already
+    # authenticated, so a stolen session cookie alone cannot change the
+    # account's email and lock the legitimate owner out.
+    current_password: str = Field(min_length=1, max_length=128)
+    new_email: EmailStr
+
+    @field_validator("new_email")
+    @classmethod
+    def normalize_new_email(cls, v: str) -> str:
+        return v.lower().strip()
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=72)

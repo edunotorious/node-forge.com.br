@@ -25,18 +25,14 @@ infraestrutura local via Docker Compose. O domínio público alvo é
 
 ## Aviso importante sobre o executor
 
-> O serviço `executor` monta `/var/run/docker.sock` para subir containers efêmeros com
-> Qiskit. **Isso dá acesso root-equivalente à máquina host.** Em desenvolvimento na sua
-> máquina é aceitável — mas este design **não é seguro pra produção** sem substituição
-> por sandbox de verdade (gVisor, Firecracker, microVMs). Não suba este compose como
-> está em servidor compartilhado nem em produção.
+> O serviço `executor` roda código Python arbitrário do usuário. **Não é seguro pra
+> produção** — Phase 7 v1 executa via `subprocess` dentro do próprio container do
+> executor (sem sandbox por execução). Em desenvolvimento na sua máquina é aceitável;
+> em servidor compartilhado ou produção, **não suba este compose como está** sem
+> substituir o runner por sandbox de verdade (containers efêmeros via docker.sock,
+> gVisor, Firecracker, microVMs).
 
 ## Rodando localmente
-
-Até a Phase 7 (executor isolado), o comando padrão sobe apenas
-`postgres + backend + frontend`. O serviço `executor` está marcado com
-`profiles: ["executor"]` e só entra na composição quando você passa
-`--profile executor` explicitamente.
 
 ```bash
 cp .env.example .env
@@ -44,10 +40,10 @@ docker compose up -d --build
 
 # em outra aba, depois que o postgres ficar healthy:
 docker compose exec backend uv run alembic upgrade head
-
-# Phase 7+ — quando o executor estiver implementado:
-docker compose --profile executor up -d --build
 ```
+
+Phase 7 entrou no compose padrão — `executor` sobe junto agora; não precisa mais de
+`--profile executor`.
 
 Endpoints:
 

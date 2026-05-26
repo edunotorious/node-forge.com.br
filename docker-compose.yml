@@ -47,21 +47,24 @@ services:
       - executor-net
 
   executor:
-    # Implemented in Phase 7.
-    # WARNING: mounts /var/run/docker.sock — root-equivalent on the host.
-    # Dev only. Isolated on executor-net so the frontend cannot reach it.
-    # Gated behind a profile so `docker compose up` does not try to build
-    # this service (it has no Dockerfile yet) until Phase 7 lands. Bring
-    # it up explicitly with `docker compose --profile executor up`.
-    profiles: ["executor"]
+    # Phase 7 v1: runs user Python via `subprocess.run` inside this same
+    # container. The docker.sock mount and ephemeral-container architecture
+    # described in the README are deferred to a later hardening pass —
+    # documented in the executor's main.py docstring with the v1 trade-offs.
+    # Reachable ONLY on executor-net (no host port published); the backend
+    # is the sole client.
     build:
       context: ./executor
       dockerfile: Dockerfile
     env_file: .env
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     # ports:
     #   - "8001:8001"  # uncomment only for isolated debugging of the executor
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - executor-net
 

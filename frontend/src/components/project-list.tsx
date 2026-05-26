@@ -2,8 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { Copy, ImageIcon, Loader2, PencilLine, Plus, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -21,13 +21,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +38,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Link } from "@/i18n/navigation";
+import { cn } from "@/lib/utils";
 
 interface Project {
   id: string;
@@ -52,15 +53,12 @@ const QK = ["projects"] as const;
 
 async function listProjects(): Promise<Project[]> {
   const res = await fetch("/api/projects");
-  if (!res.ok) throw new Error("Falha ao carregar projetos");
+  if (!res.ok) throw new Error("listProjects failed");
   return res.json();
 }
 
-const newSchema = z.object({
-  name: z.string().min(1, "Informe um nome").max(255),
-  description: z.string().max(2000).optional(),
-});
-type NewValues = z.infer<typeof newSchema>;
+type NewValues = { name: string; description?: string };
+type RenameValues = { name: string };
 
 async function createProject(values: NewValues): Promise<Project> {
   const res = await fetch("/api/projects", {
@@ -68,13 +66,23 @@ async function createProject(values: NewValues): Promise<Project> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(values),
   });
-  if (!res.ok) throw new Error("Falha ao criar projeto");
+  if (!res.ok) throw new Error("createProject failed");
+  return res.json();
+}
+
+async function renameProject(id: string, name: string): Promise<Project> {
+  const res = await fetch(`/api/projects/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error("renameProject failed");
   return res.json();
 }
 
 async function deleteProjectReq(id: string): Promise<void> {
   const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Falha ao deletar projeto");
+  if (!res.ok) throw new Error("deleteProject failed");
 }
 
 // Built outside the component so React 19's `react-hooks/purity` rule does
@@ -91,20 +99,21 @@ function buildOptimisticProject(values: NewValues): Project {
   };
 }
 
-function formatDate(s: string): string {
-  return new Date(s).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export function ProjectList({ initialData }: { initialData: Project[] }) {
+  const t = useTranslations("projects");
   const qc = useQueryClient();
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [renamingProject, setRenamingProject] = useState<Project | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+
+  const newSchema = z.object({
+    name: z.string().min(1, t("newDialog.nameRequired")).max(255),
+    description: z.string().max(2000).optional(),
+  });
+
+  const renameSchema = z.object({
+    name: z.string().min(1, t("renameDialog.nameRequired")).max(255),
+  });
 
   const projects = useQuery({
     queryKey: QK,
@@ -123,12 +132,34 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(QK, ctx.prev);
-      toast.error("Falha ao criar projeto");
+      toast.error(t("toast.createFailed"));
     },
     onSuccess: () => {
       setNewOpen(false);
       newForm.reset();
-      toast.success("Projeto criado");
+      toast.success(t("toast.created"));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: QK }),
+  });
+
+  const renameMut = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      renameProject(id, name),
+    onMutate: async ({ id, name }) => {
+      await qc.cancelQueries({ queryKey: QK });
+      const prev = qc.getQueryData<Project[]>(QK);
+      qc.setQueryData<Project[]>(QK, (old = []) =>
+        old.map((p) => (p.id === id ? { ...p, name } : p)),
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(QK, ctx.prev);
+      toast.error(t("toast.renameFailed"));
+    },
+    onSuccess: () => {
+      setRenamingProject(null);
+      toast.success(t("toast.renamed"));
     },
     onSettled: () => qc.invalidateQueries({ queryKey: QK }),
   });
@@ -143,11 +174,11 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(QK, ctx.prev);
-      toast.error("Falha ao deletar projeto");
+      toast.error(t("toast.deleteFailed"));
     },
     onSuccess: () => {
       setConfirmingId(null);
-      toast.success("Projeto deletado");
+      toast.success(t("toast.deleted"));
     },
     onSettled: () => qc.invalidateQueries({ queryKey: QK }),
   });
@@ -157,12 +188,21 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
     defaultValues: { name: "", description: "" },
   });
 
+  const renameForm = useForm<RenameValues>({
+    resolver: zodResolver(renameSchema),
+    defaultValues: { name: "" },
+  });
+
   const items = projects.data ?? [];
 
   return (
-    <div className="container mx-auto p-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Meus projetos</h1>
+    <div className="px-8 py-10 sm:px-12">
+      <h1 className="font-heading text-4xl font-black sm:text-5xl">
+        {t("title")}
+      </h1>
+
+      <div className="mt-10 grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
+        {/* "+" create tile — always first */}
         <Dialog
           open={newOpen}
           onOpenChange={(o) => {
@@ -171,23 +211,25 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
           }}
         >
           <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" /> Novo projeto
-            </Button>
+            <button
+              type="button"
+              aria-label={t("createTileAria")}
+              className="group flex aspect-[5/4] items-center justify-center rounded-2xl bg-primary text-primary-foreground transition-all hover:scale-[1.02] hover:shadow-lg"
+            >
+              <Plus className="h-12 w-12 stroke-[2.5]" />
+            </button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Novo projeto</DialogTitle>
-              <DialogDescription>
-                Dê um nome para o seu novo circuito.
-              </DialogDescription>
+              <DialogTitle>{t("newDialog.title")}</DialogTitle>
+              <DialogDescription>{t("newDialog.description")}</DialogDescription>
             </DialogHeader>
             <form
               onSubmit={newForm.handleSubmit((v) => createMut.mutate(v))}
               className="space-y-4"
             >
               <div className="space-y-2">
-                <Label htmlFor="name">Nome</Label>
+                <Label htmlFor="name">{t("newDialog.name")}</Label>
                 <Input id="name" autoFocus {...newForm.register("name")} />
                 {newForm.formState.errors.name && (
                   <p className="text-sm text-destructive">
@@ -196,7 +238,9 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="description">Descrição (opcional)</Label>
+                <Label htmlFor="description">
+                  {t("newDialog.descriptionField")}
+                </Label>
                 <Input id="description" {...newForm.register("description")} />
               </div>
               <DialogFooter>
@@ -204,54 +248,81 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
                   {createMut.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Criar
+                  {t("newDialog.submit")}
                 </Button>
               </DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
+
+        {items.map((p) => (
+          <ProjectTile
+            key={p.id}
+            project={p}
+            onRename={() => {
+              renameForm.reset({ name: p.name });
+              setRenamingProject(p);
+            }}
+            onChangeImage={() => toast.info(t("contextMenu.comingSoon"))}
+            onDuplicate={() => toast.info(t("contextMenu.comingSoon"))}
+            onDelete={() => setConfirmingId(p.id)}
+          />
+        ))}
       </div>
 
-      {items.length === 0 ? (
-        <div className="mt-12 rounded-lg border border-dashed p-12 text-center">
-          <p className="text-muted-foreground">Você ainda não tem projetos.</p>
-          <Button className="mt-4" onClick={() => setNewOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" /> Crie seu primeiro projeto
-          </Button>
-        </div>
-      ) : (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((p) => (
-            <Card key={p.id}>
-              <CardHeader>
-                <CardTitle className="truncate">{p.name}</CardTitle>
-                <CardDescription className="line-clamp-2">
-                  {p.description ?? <span className="italic">Sem descrição</span>}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">
-                  Atualizado em {formatDate(p.updated_at)}
-                </p>
-              </CardContent>
-              <CardFooter className="justify-between">
-                <Button asChild variant="default" size="sm">
-                  <Link href={`/projects/${p.id}`}>Abrir</Link>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setConfirmingId(p.id)}
-                  aria-label="Deletar projeto"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
+      {items.length === 0 && (
+        <p className="mt-8 text-sm text-muted-foreground">
+          {t("empty.message")}
+        </p>
       )}
 
+      {/* Rename dialog */}
+      <Dialog
+        open={renamingProject !== null}
+        onOpenChange={(o) => {
+          if (!o) setRenamingProject(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("renameDialog.title")}</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={renameForm.handleSubmit((v) => {
+              if (renamingProject) {
+                renameMut.mutate({ id: renamingProject.id, name: v.name });
+              }
+            })}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="rename-name">{t("renameDialog.name")}</Label>
+              <Input
+                id="rename-name"
+                autoFocus
+                {...renameForm.register("name")}
+              />
+              {renameForm.formState.errors.name && (
+                <p className="text-sm text-destructive">
+                  {renameForm.formState.errors.name.message}
+                </p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={renameMut.isPending}>
+                {renameMut.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {renameMut.isPending
+                  ? t("renameDialog.submitting")
+                  : t("renameDialog.submit")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm */}
       <AlertDialog
         open={confirmingId !== null}
         onOpenChange={(o) => {
@@ -260,14 +331,13 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Deletar projeto?</AlertDialogTitle>
+            <AlertDialogTitle>{t("deleteDialog.title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. O projeto e todo o seu grafo
-              serão removidos permanentemente.
+              {t("deleteDialog.description")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t("deleteDialog.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
@@ -275,11 +345,65 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
               }}
               disabled={deleteMut.isPending}
             >
-              {deleteMut.isPending ? "Deletando..." : "Deletar"}
+              {deleteMut.isPending
+                ? t("deleteDialog.confirming")
+                : t("deleteDialog.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+interface ProjectTileProps {
+  project: Project;
+  onRename: () => void;
+  onChangeImage: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}
+
+function ProjectTile({
+  project,
+  onRename,
+  onChangeImage,
+  onDuplicate,
+  onDelete,
+}: ProjectTileProps) {
+  const t = useTranslations("projects");
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div className="space-y-2">
+          <Link
+            href={`/projects/${project.id}`}
+            aria-label={t("card.openAria", { name: project.name })}
+            className={cn(
+              "block aspect-[5/4] rounded-2xl bg-muted transition-all",
+              "hover:scale-[1.02] hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+            )}
+          />
+          <p className="truncate text-center font-heading text-lg font-bold">
+            {project.name || t("card.untitled")}
+          </p>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={onRename}>
+          <PencilLine /> {t("contextMenu.rename")}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onChangeImage}>
+          <ImageIcon /> {t("contextMenu.changeImage")}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onDuplicate}>
+          <Copy /> {t("contextMenu.duplicate")}
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem variant="destructive" onSelect={onDelete}>
+          <Trash2 /> {t("contextMenu.delete")}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

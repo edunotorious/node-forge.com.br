@@ -1,25 +1,38 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { useEditor } from "@/stores/editor";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
-export function PropertiesPanel() {
+// `embedded` (default true): rendered inside the LeftPanel's "Inspect" tab —
+// no outer aside, no width. Pass `embedded={false}` to use this as a
+// standalone right sidebar (kept for flexibility).
+export function PropertiesPanel({ embedded = true }: { embedded?: boolean }) {
+  const t = useTranslations("editor.properties");
   const config = useEditor((s) => s.config);
   const setConfig = useEditor((s) => s.setConfig);
   const selectedNode = useEditor((s) =>
     s.selectedNodeId ? s.nodes.find((n) => n.id === s.selectedNodeId) : null,
   );
 
+  const Wrapper = embedded ? "div" : "aside";
+
   return (
-    <aside className="w-[280px] shrink-0 overflow-y-auto border-l bg-muted/30 p-4">
+    <Wrapper
+      className={cn(
+        embedded ? "p-3" : "w-[280px] shrink-0 overflow-y-auto border-l bg-muted/30 p-4",
+      )}
+    >
       <section className="space-y-3">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Configuração do circuito
+          {t("circuitConfig")}
         </h2>
         <div className="space-y-2">
           <Label htmlFor="num-qubits" className="text-xs">
-            Qubits
+            {t("qubits")}
           </Label>
           <Input
             id="num-qubits"
@@ -35,7 +48,7 @@ export function PropertiesPanel() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="num-classical" className="text-xs">
-            Bits clássicos
+            {t("classicalBits")}
           </Label>
           <Input
             id="num-classical"
@@ -51,7 +64,7 @@ export function PropertiesPanel() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="default-shots" className="text-xs">
-            Shots padrão
+            {t("defaultShots")}
           </Label>
           <Input
             id="default-shots"
@@ -68,16 +81,16 @@ export function PropertiesPanel() {
 
       <section className="mt-6 space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Nodo selecionado
+          {t("selectedNode")}
         </h2>
         {selectedNode ? (
           <div className="rounded border bg-background p-2 text-xs">
             <div>
-              <span className="text-muted-foreground">Tipo:</span>{" "}
+              <span className="text-muted-foreground">{t("type")}</span>{" "}
               <span className="font-mono">{selectedNode.type}</span>
             </div>
             <div className="mt-1">
-              <span className="text-muted-foreground">id:</span>{" "}
+              <span className="text-muted-foreground">{t("id")}</span>{" "}
               <span className="font-mono">{selectedNode.id}</span>
             </div>
             <pre className="mt-2 overflow-x-auto rounded bg-muted p-1 text-[11px]">
@@ -85,11 +98,9 @@ export function PropertiesPanel() {
             </pre>
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">
-            Clique num nodo no canvas para ver/editar suas propriedades.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("emptySelection")}</p>
         )}
       </section>
-    </aside>
+    </Wrapper>
   );
 }

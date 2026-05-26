@@ -1,25 +1,38 @@
 "use client";
 
 import { ReactFlowProvider, type Edge, type Node } from "@xyflow/react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
-import { DEFAULT_CONFIG, type GraphConfig } from "@/lib/graph-types";
+import { BottomPanel } from "@/components/editor/BottomPanel";
+import { Canvas } from "@/components/editor/Canvas";
+import { EditorTopBar } from "@/components/editor/EditorTopBar";
+import { FileTabsBar } from "@/components/editor/FileTabsBar";
+import { LeftPanel } from "@/components/editor/LeftPanel";
+import {
+  DEFAULT_CONFIG,
+  type ExecutionJob,
+  type FunctionDef,
+  type GraphConfig,
+  type VariableDef,
+} from "@/lib/graph-types";
+import type { ProjectFileSummary } from "@/lib/server-api";
 import { useEditor } from "@/stores/editor";
-
-import { Canvas } from "./Canvas";
-import { EditorTopBar } from "./EditorTopBar";
-import { NodePalette } from "./NodePalette";
-import { PropertiesPanel } from "./PropertiesPanel";
 
 interface EditorProps {
   initial: {
-    id: string;
-    name: string;
+    projectId: string;
+    projectName: string;
+    fileId: string;
+    fileName: string;
+    files: ProjectFileSummary[];
     graph: {
       nodes: unknown[];
       edges: unknown[];
       config: Partial<GraphConfig>;
+      variables: VariableDef[];
+      functions: FunctionDef[];
     };
   };
 }
@@ -27,6 +40,7 @@ interface EditorProps {
 const AUTOSAVE_DEBOUNCE_MS = 1000;
 
 export function Editor({ initial }: EditorProps) {
+  const t = useTranslations("editor");
   const hydrate = useEditor((s) => s.hydrate);
   const reset = useEditor((s) => s.reset);
   const setSaveStatus = useEditor((s) => s.setSaveStatus);
@@ -35,11 +49,16 @@ export function Editor({ initial }: EditorProps) {
   // so leftover state cannot leak into the next project the user opens.
   useEffect(() => {
     hydrate({
-      projectId: initial.id,
-      projectName: initial.name,
+      projectId: initial.projectId,
+      projectName: initial.projectName,
+      fileId: initial.fileId,
+      fileName: initial.fileName,
+      files: initial.files,
       nodes: (initial.graph.nodes ?? []) as Node[],
       edges: (initial.graph.edges ?? []) as Edge[],
       config: { ...DEFAULT_CONFIG, ...(initial.graph.config ?? {}) },
+      variables: initial.graph.variables,
+      functions: initial.graph.functions,
     });
     return () => {
       reset();
@@ -48,29 +67,84 @@ export function Editor({ initial }: EditorProps) {
 
   const save = useCallback(async () => {
     const state = useEditor.getState();
-    if (!state.projectId) return;
+    if (!state.projectId || !state.fileId) return;
     setSaveStatus("saving");
     try {
-      const res = await fetch(`/api/projects/${state.projectId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: state.projectName,
-          graph_json: {
-            nodes: state.nodes,
-            edges: state.edges,
-            config: state.config,
-          },
+      // Project name lives on `projects`; the graph lives on the active
+      // `project_files` row. Fire both in parallel — they target different
+      // endpoints and there is no ordering requirement.
+      const [projRes, fileRes] = await Promise.all([
+        fetch(`/api/projects/${state.projectId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: state.projectName }),
         }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        fetch(
+          `/api/projects/${state.projectId}/files/${state.fileId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              graph_json: {
+                nodes: state.nodes,
+                edges: state.edges,
+                config: state.config,
+                variables: state.variables,
+                functions: state.functions,
+              },
+            }),
+          },
+        ),
+      ]);
+      if (!projRes.ok) throw new Error(`project PATCH HTTP ${projRes.status}`);
+      if (!fileRes.ok) throw new Error(`file PATCH HTTP ${fileRes.status}`);
       setSaveStatus("saved", new Date());
     } catch (err) {
       console.error("autosave failed", err);
       setSaveStatus("error");
-      toast.error("Falha ao salvar projeto");
+      toast.error(t("autosaveFailed"));
     }
-  }, [setSaveStatus]);
+  }, [setSaveStatus, t]);
+
+  // Force-save before file switch / explicit Save click — skips the debounce
+  // if a save is not already pending.
+  const flushSave = useCallback(async () => {
+    const status = useEditor.getState().saveStatus;
+    if (status === "dirty") await save();
+  }, [save]);
+
+  const setLastJob = useEditor((s) => s.setLastJob);
+  const setIsRunning = useEditor((s) => s.setIsRunning);
+  const setBottomTab = useEditor((s) => s.setBottomTab);
+
+  // Execute the active file: persist pending edits, POST to the runner, and
+  // park the response in `lastJob` so the Console tab can render it. v1 is
+  // sync (the server blocks until the executor finishes); the Console tab
+  // is auto-switched to so the result is immediately visible.
+  const runFile = useCallback(async () => {
+    const state = useEditor.getState();
+    if (!state.projectId || !state.fileId || state.isRunning) return;
+    setIsRunning(true);
+    setBottomTab("console");
+    try {
+      await flushSave();
+      const res = await fetch(
+        `/api/projects/${state.projectId}/files/${state.fileId}/run`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail ?? `HTTP ${res.status}`);
+      }
+      const job: ExecutionJob = await res.json();
+      setLastJob(job);
+    } catch (err) {
+      toast.error(t("run.failed"));
+      console.error("run failed", err);
+    } finally {
+      setIsRunning(false);
+    }
+  }, [flushSave, setIsRunning, setLastJob, setBottomTab, t]);
 
   // Debounced auto-save: when status flips to "dirty", wait
   // AUTOSAVE_DEBOUNCE_MS of quiet then PATCH.
@@ -89,13 +163,14 @@ export function Editor({ initial }: EditorProps) {
 
   return (
     <ReactFlowProvider>
-      <div className="flex h-[calc(100vh-3.5rem)] flex-col">
+      <div className="flex h-[calc(100vh-3rem)] flex-col">
         <EditorTopBar onSaveNow={() => void save()} />
+        <FileTabsBar flushSave={flushSave} onRun={() => void runFile()} />
         <div className="flex flex-1 overflow-hidden">
-          <NodePalette />
+          <LeftPanel />
           <Canvas />
-          <PropertiesPanel />
         </div>
+        <BottomPanel />
       </div>
     </ReactFlowProvider>
   );

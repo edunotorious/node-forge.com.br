@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.deps import get_current_user
 from src.auth.jwt import create_access_token
 from src.auth.password import dummy_verify, hash_password, verify_password
-from src.auth.schemas import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from src.auth.schemas import (
+    EmailChangeRequest,
+    LoginRequest,
+    PasswordChangeRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserResponse,
+)
 from src.config import get_settings
 from src.db.models import User
 from src.db.session import get_session
@@ -96,3 +103,54 @@ async def logout(response: Response) -> None:
         httponly=True,
         samesite="lax",
     )
+
+
+@router.patch("/me/email", response_model=UserResponse)
+async def change_email(
+    data: EmailChangeRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> User:
+    # Re-verify current password — having a valid session is not enough to
+    # change the email (a stolen cookie alone must not let an attacker pivot
+    # the account onto their own email).
+    if not verify_password(data.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid current password",
+        )
+
+    if data.new_email == user.email:
+        return user
+
+    # Defend against the race where a parallel transaction grabs the same
+    # email — the unique index will reject one of them; we surface 409 to be
+    # consistent with /register.
+    stmt = select(User).where(User.email == data.new_email)
+    existing = (await session.execute(stmt)).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered",
+        )
+
+    user.email = data.new_email
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+@router.patch("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    data: PasswordChangeRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    if not verify_password(data.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid current password",
+        )
+
+    user.password_hash = hash_password(data.new_password)
+    await session.commit()

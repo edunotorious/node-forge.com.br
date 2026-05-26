@@ -1,0 +1,277 @@
+{
+  "common": {
+    "logout": "Sair"
+  },
+  "nav": {
+    "nodeVault": "Node Vault",
+    "nodeVaultComingSoon": "Em breve",
+    "projects": "Projetos",
+    "profileAria": "Abrir perfil",
+    "languageSwitcherAria": "Trocar idioma"
+  },
+  "auth": {
+    "login": {
+      "title": "Entrar",
+      "description": "Acesse sua conta para abrir seus projetos.",
+      "email": "Email",
+      "password": "Senha",
+      "submit": "LOGIN",
+      "submitting": "Entrando...",
+      "registerCta": "Novo usuário",
+      "forgotPassword": "Esqueceu sua senha?",
+      "forgotPasswordComingSoon": "Em breve",
+      "errors": {
+        "invalidEmail": "Email inválido",
+        "passwordRequired": "Informe sua senha",
+        "loginFailed": "Erro ao fazer login"
+      }
+    },
+    "register": {
+      "title": "Criar conta",
+      "description": "Cadastre-se para começar a usar o Node-Forge.",
+      "email": "Email",
+      "password": "Senha",
+      "passwordHint": "Mínimo 12 caracteres.",
+      "submit": "Criar conta",
+      "submitting": "Criando...",
+      "hasAccount": "Já tem conta?",
+      "loginCta": "Entrar",
+      "errors": {
+        "invalidEmail": "Email inválido",
+        "passwordMin": "A senha precisa ter pelo menos 12 caracteres",
+        "passwordMax": "Máximo 72 caracteres",
+        "registerFailed": "Erro ao criar conta"
+      }
+    }
+  },
+  "projects": {
+    "title": "Projects",
+    "createTileAria": "Criar novo projeto",
+    "newDialog": {
+      "title": "Novo projeto",
+      "description": "Dê um nome para o seu novo circuito.",
+      "name": "Nome",
+      "nameRequired": "Informe um nome",
+      "descriptionField": "Descrição (opcional)",
+      "submit": "Criar"
+    },
+    "empty": {
+      "message": "Você ainda não tem projetos. Clique no tile laranja para criar o primeiro."
+    },
+    "card": {
+      "openAria": "Abrir projeto {name}",
+      "untitled": "Sem título"
+    },
+    "contextMenu": {
+      "rename": "Renomear",
+      "changeImage": "Mudar imagem do projeto",
+      "duplicate": "Duplicar",
+      "delete": "Deletar projeto",
+      "comingSoon": "Em breve"
+    },
+    "renameDialog": {
+      "title": "Renomear projeto",
+      "name": "Nome",
+      "nameRequired": "Informe um nome",
+      "submit": "Salvar",
+      "submitting": "Salvando..."
+    },
+    "deleteDialog": {
+      "title": "Deletar projeto?",
+      "description": "Esta ação não pode ser desfeita. O projeto e todo o seu grafo serão removidos permanentemente.",
+      "cancel": "Cancelar",
+      "confirm": "Deletar",
+      "confirming": "Deletando..."
+    },
+    "toast": {
+      "createFailed": "Falha ao criar projeto",
+      "created": "Projeto criado",
+      "deleteFailed": "Falha ao deletar projeto",
+      "deleted": "Projeto deletado",
+      "listFailed": "Falha ao carregar projetos",
+      "renameFailed": "Falha ao renomear projeto",
+      "renamed": "Projeto renomeado"
+    }
+  },
+  "editor": {
+    "backToProjects": "Voltar para projetos",
+    "projectNamePlaceholder": "Nome do projeto",
+    "save": "Salvar",
+    "run": "Run",
+    "runDisabledTooltip": "Disponível na Phase 7",
+    "autosaveFailed": "Falha ao salvar projeto",
+    "status": {
+      "saving": "Salvando...",
+      "saveError": "Erro ao salvar",
+      "savedAt": "Salvo às {time}",
+      "unsaved": "Mudanças não salvas",
+      "idle": "—"
+    },
+    "palette": {
+      "title": "Paleta",
+      "groups": {
+        "singleQubit": "Gates de 1 qubit",
+        "twoQubits": "Gates de 2 qubits",
+        "measurement": "Medição e estrutura",
+        "execution": "Execução e visualização"
+      }
+    },
+    "tabs": {
+      "details": "Details",
+      "classes": "Classes",
+      "inspect": "Inspect",
+      "console": "Console",
+      "terminal": "Terminal",
+      "imports": "Imports"
+    },
+    "classesPlaceholder": "Definições de classes virão aqui (Fase futura).",
+    "details": {
+      "paletteSection": "Paleta",
+      "variables": "Variables",
+      "functions": "Functions",
+      "addVariable": "Add Variable",
+      "addFunction": "Add function",
+      "emptyVariables": "Nenhuma variável definida.",
+      "emptyFunctions": "Nenhuma função definida.",
+      "removeAria": "Remover"
+    },
+    "variableDialog": {
+      "title": "Nova variável",
+      "name": "Nome",
+      "namePlaceholder": "ex: my_var, _hidden, MY_CONST",
+      "type": "Tipo",
+      "value": "Valor inicial (opcional)",
+      "submit": "Adicionar",
+      "nameRequired": "Informe um nome",
+      "nameInvalid": "Nome inválido (use letras, dígitos e _)",
+      "duplicateName": "Já existe uma variável com esse nome"
+    },
+    "functionDialog": {
+      "title": "Nova função",
+      "name": "Nome",
+      "namePlaceholder": "ex: my_func",
+      "returnType": "Retorna",
+      "body": "Corpo (Python)",
+      "bodyPlaceholder": "return ...",
+      "submit": "Adicionar",
+      "nameRequired": "Informe um nome",
+      "nameInvalid": "Nome inválido (use letras, dígitos e _)",
+      "duplicateName": "Já existe uma função com esse nome"
+    },
+    "terminal": {
+      "banner": "O Terminal será conectado ao executor na Fase 7. O input abaixo é apenas visual por enquanto.",
+      "prompt": ">",
+      "inputAria": "Comando do terminal"
+    },
+    "imports": {
+      "nodeImports": "Node Imports",
+      "pythonPackages": "Python Packages",
+      "author": "Autor:",
+      "description": "Descrição:",
+      "version": "Versão:"
+    },
+    "runControls": {
+      "play": "Executar",
+      "pause": "Pausar",
+      "stop": "Parar",
+      "comingSoon": "Em breve",
+      "running": "Executando..."
+    },
+    "console": {
+      "empty": "Nenhuma execução ainda. Clique em ▶ para rodar o circuito.",
+      "running": "Executando…",
+      "exitOk": "Concluído",
+      "exitFailed": "Falhou",
+      "exitTimeout": "Timeout",
+      "exitError": "Erro de sistema",
+      "stdout": "stdout",
+      "stderr": "stderr",
+      "artifacts": "Artefatos",
+      "elapsed": "Tempo: {ms}ms"
+    },
+    "run": {
+      "failed": "Falha ao executar"
+    },
+    "files": {
+      "addAria": "Adicionar novo arquivo",
+      "newFileDialogTitle": "Novo arquivo",
+      "name": "Nome do arquivo",
+      "namePlaceholder": "Ex: Arquivo 2",
+      "nameRequired": "Informe um nome",
+      "submit": "Criar",
+      "submitting": "Criando...",
+      "switchFailed": "Falha ao abrir o arquivo",
+      "createFailed": "Falha ao criar arquivo",
+      "created": "Arquivo criado"
+    },
+    "properties": {
+      "circuitConfig": "Configuração do circuito",
+      "qubits": "Qubits",
+      "classicalBits": "Bits clássicos",
+      "defaultShots": "Shots padrão",
+      "selectedNode": "Nodo selecionado",
+      "emptySelection": "Clique num nodo no canvas para ver/editar suas propriedades.",
+      "type": "Tipo:",
+      "id": "id:"
+    }
+  },
+  "profile": {
+    "changeAvatarComingSoon": "Em breve",
+    "userSettings": {
+      "title": "User Settings",
+      "username": "Username:",
+      "email": "Email",
+      "password": "Password:",
+      "changeUsername": "Change Username",
+      "changeEmail": "Change Email",
+      "changePassword": "Change Password",
+      "usernameComingSoon": "Em breve",
+      "passwordMasked": "*********"
+    },
+    "vaultProfile": {
+      "title": "Vault profile",
+      "name": "Name:",
+      "bio": "Bio:",
+      "yourSite": "Your site:",
+      "socialAccounts": "Social accounts:",
+      "country": "Country",
+      "email": "Email:",
+      "showEmail": "Show email on profile",
+      "comingSoon": "Em breve"
+    },
+    "changeEmail": {
+      "title": "Mudar email",
+      "currentPassword": "Senha atual",
+      "newEmail": "Novo email",
+      "submit": "Salvar",
+      "submitting": "Salvando...",
+      "errors": {
+        "passwordRequired": "Informe sua senha atual",
+        "invalidEmail": "Email inválido"
+      }
+    },
+    "changePassword": {
+      "title": "Mudar senha",
+      "currentPassword": "Senha atual",
+      "newPassword": "Nova senha",
+      "newPasswordHint": "Mínimo 12 caracteres.",
+      "submit": "Salvar",
+      "submitting": "Salvando...",
+      "errors": {
+        "passwordRequired": "Informe sua senha atual",
+        "newPasswordMin": "A nova senha precisa ter pelo menos 12 caracteres",
+        "newPasswordMax": "Máximo 72 caracteres"
+      }
+    },
+    "toast": {
+      "emailChanged": "Email alterado",
+      "emailChangeFailed": "Falha ao alterar email",
+      "passwordChanged": "Senha alterada",
+      "passwordChangeFailed": "Falha ao alterar senha"
+    }
+  },
+  "metadata": {
+    "title": "Node-Forge",
+    "description": "IDE visual para computação quântica."
+  }
+}
