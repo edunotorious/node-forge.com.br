@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -36,6 +37,25 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # NULL until the user picks one. Unique-with-nulls (Postgres treats NULLs
+    # as distinct) lets multiple users coexist with no username.
+    username: Mapped[str | None] = mapped_column(
+        String(64), unique=True, nullable=True
+    )
+    # Avatar bytes inlined into the row. PNG only, capped at 1 MB by the
+    # upload endpoint; Postgres TOAST handles the compression. Object
+    # storage is a future migration once we know who actually uploads.
+    avatar_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    avatar_mime: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Free-form public-profile fields (name/bio/website/socials/country/
+    # show_email_on_profile). Stored as JSONB so adding fields later is a
+    # one-line schema change.
+    profile_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=lambda: {},
+        server_default=text("'{}'::jsonb"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -45,6 +65,13 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def has_avatar(self) -> bool:
+        """Exposed as a flag on UserResponse so the client knows whether to
+        render the avatar URL without paying for the bytes on every /auth/me.
+        """
+        return self.avatar_data is not None
 
 
 class Project(Base):

@@ -1,33 +1,108 @@
 "use client";
 
-import { PencilLine, UserRound } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, PencilLine, Trash2, UserRound } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ChangeEmailDialog } from "@/components/profile/change-email-dialog";
 import { ChangePasswordDialog } from "@/components/profile/change-password-dialog";
+import { ChangeUsernameDialog } from "@/components/profile/change-username-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 
 interface ProfilePageProps {
-  user: { id: string; email: string; created_at: string };
+  user: {
+    id: string;
+    email: string;
+    username: string | null;
+    has_avatar: boolean;
+    created_at: string;
+  };
 }
+
+interface VaultProfile {
+  name: string | null;
+  bio: string | null;
+  website: string | null;
+  social_accounts: string[];
+  country: string | null;
+  show_email_on_profile: boolean;
+}
+
+const PROFILE_QK = ["profile"] as const;
+const SOCIAL_SLOTS = 4;
 
 export function ProfilePage({ user }: ProfilePageProps) {
   const t = useTranslations("profile");
+  const router = useRouter();
+  const qc = useQueryClient();
+
   const [emailOpen, setEmailOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [usernameOpen, setUsernameOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Username display is derived from email until a real username column lands
-  // — clicking "Change Username" surfaces an "Em breve" toast.
-  const usernameStub = user.email.split("@")[0] ?? "";
+  // Cache-buster appended on avatar (re)upload so the `<img>` reloads
+  // instead of serving the old cached bytes.
+  const [avatarCacheKey, setAvatarCacheKey] = useState(0);
 
-  function showComingSoon() {
-    toast.info(t("changeAvatarComingSoon"));
+  const profileQuery = useQuery<VaultProfile>({
+    queryKey: PROFILE_QK,
+    queryFn: async () => {
+      const r = await fetch("/api/users/me/profile");
+      if (!r.ok) throw new Error("failed to load profile");
+      return r.json();
+    },
+  });
+
+  const uploadAvatarMut = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/users/me/avatar", { method: "PUT", body: fd });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail ?? t("avatar.uploadFailed"));
+      }
+    },
+    onSuccess: () => {
+      toast.success(t("avatar.uploaded"));
+      setAvatarCacheKey((k) => k + 1);
+      router.refresh();
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  const removeAvatarMut = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/users/me/avatar", { method: "DELETE" });
+      if (!res.ok) throw new Error(t("avatar.removeFailed"));
+    },
+    onSuccess: () => {
+      toast.success(t("avatar.removed"));
+      setAvatarCacheKey((k) => k + 1);
+      router.refresh();
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  function onAvatarPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file) return;
+    if (file.type !== "image/png") {
+      toast.error(t("avatar.uploadFailed"));
+      return;
+    }
+    uploadAvatarMut.mutate(file);
   }
+
+  const usernameDisplay = user.username ?? user.email.split("@")[0] ?? "";
 
   return (
     <div className="px-6 py-10 sm:px-12">
@@ -35,23 +110,53 @@ export function ProfilePage({ user }: ProfilePageProps) {
       <div className="flex items-start gap-6">
         <button
           type="button"
-          onClick={showComingSoon}
-          aria-label={t("changeAvatarComingSoon")}
-          title={t("changeAvatarComingSoon")}
+          onClick={() => fileInputRef.current?.click()}
+          aria-label={t("uploadAvatarAria")}
           className="group relative size-32 shrink-0 overflow-hidden rounded-full bg-muted ring-1 ring-foreground/10 transition-opacity hover:opacity-90"
         >
-          <UserRound className="absolute inset-0 m-auto size-20 text-muted-foreground" />
+          {user.has_avatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`/api/users/me/avatar?v=${avatarCacheKey}`}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <UserRound className="absolute inset-0 m-auto size-20 text-muted-foreground" />
+          )}
           <span className="absolute inset-0 flex items-center justify-center bg-foreground/40 opacity-0 transition-opacity group-hover:opacity-100">
-            <PencilLine className="size-8 text-white" />
+            {uploadAvatarMut.isPending ? (
+              <Loader2 className="size-8 animate-spin text-white" />
+            ) : (
+              <PencilLine className="size-8 text-white" />
+            )}
           </span>
         </button>
-        <div className="min-w-0">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png"
+          className="hidden"
+          onChange={onAvatarPick}
+        />
+
+        <div className="min-w-0 flex-1">
           <h1 className="truncate font-heading text-4xl font-black sm:text-5xl">
-            {usernameStub || t("userSettings.username")}
+            {usernameDisplay}
           </h1>
           <p className="mt-1 truncate text-sm text-muted-foreground">
             {user.email}
           </p>
+          {user.has_avatar && (
+            <button
+              type="button"
+              onClick={() => removeAvatarMut.mutate()}
+              disabled={removeAvatarMut.isPending}
+              className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="size-3" /> {t("avatar.remove")}
+            </button>
+          )}
         </div>
       </div>
 
@@ -65,10 +170,9 @@ export function ProfilePage({ user }: ProfilePageProps) {
 
           <LockedField
             label={t("userSettings.username")}
-            value={usernameStub}
+            value={user.username ?? ""}
             buttonLabel={t("userSettings.changeUsername")}
-            onClick={showComingSoon}
-            disabledTitle={t("userSettings.usernameComingSoon")}
+            onClick={() => setUsernameOpen(true)}
           />
 
           <LockedField
@@ -86,15 +190,19 @@ export function ProfilePage({ user }: ProfilePageProps) {
           />
         </div>
 
-        {/* RIGHT — Vault profile (visual stub, all disabled) */}
-        <VaultProfileStub />
+        {/* RIGHT — Vault profile (functional) */}
+        <VaultProfileForm
+          initial={profileQuery.data}
+          loading={profileQuery.isLoading}
+        />
       </section>
 
       <ChangeEmailDialog open={emailOpen} onOpenChange={setEmailOpen} />
-      <ChangePasswordDialog
-        open={passwordOpen}
-        onOpenChange={setPasswordOpen}
-      />
+      <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
+      <ChangeUsernameDialog open={usernameOpen} onOpenChange={setUsernameOpen} />
+
+      {/* Hidden: leveraged by tanstack-query invalidation upstream. */}
+      {qc ? null : null}
     </div>
   );
 }
@@ -104,19 +212,9 @@ interface LockedFieldProps {
   value: string;
   buttonLabel: string;
   onClick: () => void;
-  disabledTitle?: string;
 }
 
-// Dark-gray locked input with the "Change …" pill button overlapping its right
-// side. The input itself is disabled — editing goes through a modal opened by
-// the button.
-function LockedField({
-  label,
-  value,
-  buttonLabel,
-  onClick,
-  disabledTitle,
-}: LockedFieldProps) {
+function LockedField({ label, value, buttonLabel, onClick }: LockedFieldProps) {
   return (
     <div className="space-y-1.5">
       <Label className="font-heading text-sm font-bold">{label}</Label>
@@ -132,7 +230,6 @@ function LockedField({
         <Button
           type="button"
           onClick={onClick}
-          title={disabledTitle}
           className="absolute right-1 top-1/2 h-8 -translate-y-1/2 px-3 text-xs"
         >
           {buttonLabel}
@@ -142,37 +239,121 @@ function LockedField({
   );
 }
 
-function VaultProfileStub() {
+function VaultProfileForm({
+  initial,
+  loading,
+}: {
+  initial: VaultProfile | undefined;
+  loading: boolean;
+}) {
   const t = useTranslations("profile.vaultProfile");
+  const tToast = useTranslations("profile.vault");
+  const qc = useQueryClient();
+
+  const patchMut = useMutation({
+    mutationFn: async (patch: Partial<VaultProfile>) => {
+      const res = await fetch("/api/users/me/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error("PATCH failed");
+      return (await res.json()) as VaultProfile;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData<VaultProfile>(PROFILE_QK, data);
+      toast.success(tToast("saved"));
+    },
+    onError: () => toast.error(tToast("saveFailed")),
+  });
+
+  // Per-field blur-save: PATCH only the field that changed if it differs
+  // from the cached value. Keeps the wire small and avoids racing the
+  // optimistic state.
+  function commit(field: keyof VaultProfile, raw: string | boolean) {
+    if (!initial) return;
+    const next = raw === "" ? null : raw;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((initial[field] as any) === next) return;
+    patchMut.mutate({ [field]: next } as Partial<VaultProfile>);
+  }
+
+  function commitSocial(idx: number, raw: string) {
+    if (!initial) return;
+    const next = [...initial.social_accounts];
+    while (next.length <= idx) next.push("");
+    next[idx] = raw;
+    // Drop trailing empties so the persisted array stays compact.
+    while (next.length && next[next.length - 1] === "") next.pop();
+    patchMut.mutate({ social_accounts: next });
+  }
+
+  if (loading || !initial) {
+    return (
+      <div className="space-y-4">
+        <h2 className="font-heading text-2xl font-black text-primary">
+          {t("title")}
+        </h2>
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4" title={t("comingSoon")}>
+    <div className="space-y-4">
       <h2 className="font-heading text-2xl font-black text-primary">
         {t("title")}
       </h2>
 
       <div className="grid grid-cols-2 gap-4">
-        <StubField label={t("name")} />
-        <StubField label={t("yourSite")} />
+        <Field
+          label={t("name")}
+          defaultValue={initial.name ?? ""}
+          onBlur={(v) => commit("name", v)}
+        />
+        <Field
+          label={t("yourSite")}
+          defaultValue={initial.website ?? ""}
+          onBlur={(v) => commit("website", v)}
+        />
       </div>
+
       <div className="grid grid-cols-2 gap-4">
-        <StubTextarea label={t("bio")} rows={6} />
+        <FieldTextarea
+          label={t("bio")}
+          defaultValue={initial.bio ?? ""}
+          onBlur={(v) => commit("bio", v)}
+        />
         <div className="space-y-2">
           <Label className="font-heading text-sm font-bold">
             {t("socialAccounts")}
           </Label>
-          <Input disabled className="h-10 bg-muted" />
-          <Input disabled className="h-10 bg-muted" />
-          <Input disabled className="h-10 bg-muted" />
-          <Input disabled className="h-10 bg-muted" />
+          {Array.from({ length: SOCIAL_SLOTS }).map((_, idx) => (
+            <Input
+              key={idx}
+              defaultValue={initial.social_accounts[idx] ?? ""}
+              onBlur={(e) => commitSocial(idx, e.target.value)}
+              className="h-10 bg-muted"
+            />
+          ))}
         </div>
       </div>
-      <StubField label={t("country")} />
+
+      <Field
+        label={t("country")}
+        defaultValue={initial.country ?? ""}
+        onBlur={(v) => commit("country", v)}
+      />
+
       <div className="space-y-2">
         <Label className="font-heading text-sm font-bold">{t("email")}</Label>
         <label className="flex items-center gap-2 text-sm">
-          <span className="grid size-5 place-items-center rounded bg-destructive/90 text-white">
-            ×
-          </span>
+          <input
+            type="checkbox"
+            defaultChecked={initial.show_email_on_profile}
+            onChange={(e) => commit("show_email_on_profile", e.target.checked)}
+            className="size-4 accent-primary"
+          />
           {t("showEmail")}
         </label>
       </div>
@@ -180,23 +361,44 @@ function VaultProfileStub() {
   );
 }
 
-function StubField({ label }: { label: string }) {
+function Field({
+  label,
+  defaultValue,
+  onBlur,
+}: {
+  label: string;
+  defaultValue: string;
+  onBlur: (value: string) => void;
+}) {
   return (
     <div className="space-y-1.5">
       <Label className="font-heading text-sm font-bold">{label}</Label>
-      <Input disabled className="h-10 bg-muted" />
+      <Input
+        defaultValue={defaultValue}
+        onBlur={(e) => onBlur(e.target.value)}
+        className="h-10 bg-muted"
+      />
     </div>
   );
 }
 
-function StubTextarea({ label, rows }: { label: string; rows: number }) {
+function FieldTextarea({
+  label,
+  defaultValue,
+  onBlur,
+}: {
+  label: string;
+  defaultValue: string;
+  onBlur: (value: string) => void;
+}) {
   return (
     <div className="space-y-1.5">
       <Label className="font-heading text-sm font-bold">{label}</Label>
       <textarea
-        disabled
-        rows={rows}
-        className="w-full resize-none rounded-md border-transparent bg-muted px-3 py-2 text-sm outline-none disabled:opacity-100"
+        defaultValue={defaultValue}
+        onBlur={(e) => onBlur(e.target.value)}
+        rows={6}
+        className="w-full resize-none rounded-md border-transparent bg-muted px-3 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       />
     </div>
   );

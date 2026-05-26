@@ -14,6 +14,7 @@ from src.auth.schemas import (
     RegisterRequest,
     TokenResponse,
     UserResponse,
+    UsernameChangeRequest,
 )
 from src.config import get_settings
 from src.db.models import User
@@ -154,3 +155,34 @@ async def change_password(
 
     user.password_hash = hash_password(data.new_password)
     await session.commit()
+
+
+@router.patch("/me/username", response_model=UserResponse)
+async def change_username(
+    data: UsernameChangeRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> User:
+    # Same re-verify-password defence as email/password change — a stolen
+    # cookie alone cannot pin the account to an attacker-chosen handle.
+    if not verify_password(data.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid current password",
+        )
+
+    if data.new_username == user.username:
+        return user
+
+    stmt = select(User).where(User.username == data.new_username)
+    existing = (await session.execute(stmt)).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already taken",
+        )
+
+    user.username = data.new_username
+    await session.commit()
+    await session.refresh(user)
+    return user

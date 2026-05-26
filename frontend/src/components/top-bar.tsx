@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Link, useRouter } from "@/i18n/navigation";
 
 interface TopBarProps {
-  user: { email: string };
+  user: { email: string; username: string | null; has_avatar: boolean };
 }
 
 // Global authenticated top bar — navy background, wordmark left, nav right.
@@ -64,8 +64,19 @@ export function TopBar({ user }: TopBarProps) {
             aria-label={t("nav.profileAria")}
             className="flex items-center gap-2 transition-opacity hover:opacity-80"
           >
-            <span className="hidden sm:inline">{user.email}</span>
-            <UserRound className="h-5 w-5" />
+            <span className="hidden sm:inline">
+              {user.username ?? user.email}
+            </span>
+            {user.has_avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src="/api/users/me/avatar"
+                alt=""
+                className="h-7 w-7 rounded-full object-cover ring-1 ring-white/30"
+              />
+            ) : (
+              <UserRound className="h-5 w-5" />
+            )}
           </Link>
           <Button
             variant="ghost"

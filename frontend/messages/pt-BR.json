@@ -216,7 +216,7 @@
     }
   },
   "profile": {
-    "changeAvatarComingSoon": "Em breve",
+    "uploadAvatarAria": "Trocar avatar",
     "userSettings": {
       "title": "User Settings",
       "username": "Username:",
@@ -239,6 +239,32 @@
       "showEmail": "Show email on profile",
       "comingSoon": "Em breve"
     },
+    "changeUsername": {
+      "title": "Mudar username",
+      "currentPassword": "Senha atual",
+      "newUsername": "Novo username",
+      "newUsernameHint": "4–32 caracteres: letras minúsculas, dígitos e _. Começa e termina com letra ou dígito.",
+      "submit": "Salvar",
+      "submitting": "Salvando...",
+      "errors": {
+        "passwordRequired": "Informe sua senha atual",
+        "usernameRequired": "Informe um username"
+      }
+    },
+    "avatar": {
+      "uploading": "Enviando...",
+      "uploaded": "Avatar atualizado",
+      "uploadFailed": "Falha ao enviar avatar",
+      "removed": "Avatar removido",
+      "removeFailed": "Falha ao remover avatar",
+      "remove": "Remover avatar"
+    },
+    "vault": {
+      "saved": "Perfil atualizado",
+      "saveFailed": "Falha ao salvar perfil"
+    },
+    "toastUsernameChanged": "Username atualizado",
+    "toastUsernameFailed": "Falha ao alterar username",
     "changeEmail": {
       "title": "Mudar email",
       "currentPassword": "Senha atual",

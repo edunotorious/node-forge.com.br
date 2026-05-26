@@ -24,10 +24,15 @@ async function forward(request: NextRequest, segments: string[]) {
   headers.set("x-internal-api-token", INTERNAL_TOKEN);
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
-  const init: RequestInit = {
+  // Stream the body through instead of reading it as text — `await
+  // request.text()` corrupts binary payloads (multipart avatar uploads,
+  // future file attachments) by UTF-8-decoding raw bytes. The stream form
+  // requires duplex:'half' on Node's fetch.
+  const init: RequestInit & { duplex?: "half" } = {
     method: request.method,
     headers,
-    body: hasBody ? await request.text() : undefined,
+    body: hasBody ? request.body : undefined,
+    duplex: hasBody ? "half" : undefined,
     redirect: "manual",
   };
 

@@ -12,6 +12,16 @@ const TOKEN = process.env.INTERNAL_API_TOKEN ?? "";
 export interface User {
   id: string;
   email: string;
+  username: string | null;
+  has_avatar: boolean;
+  profile_json: {
+    name?: string;
+    bio?: string;
+    website?: string;
+    social_accounts?: string[];
+    country?: string;
+    show_email_on_profile?: boolean;
+  };
   created_at: string;
 }
 

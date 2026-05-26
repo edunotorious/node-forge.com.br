@@ -216,7 +216,7 @@
     }
   },
   "profile": {
-    "changeAvatarComingSoon": "Coming soon",
+    "uploadAvatarAria": "Change avatar",
     "userSettings": {
       "title": "User Settings",
       "username": "Username:",
@@ -239,6 +239,32 @@
       "showEmail": "Show email on profile",
       "comingSoon": "Coming soon"
     },
+    "changeUsername": {
+      "title": "Change username",
+      "currentPassword": "Current password",
+      "newUsername": "New username",
+      "newUsernameHint": "4–32 chars: lowercase letters, digits and _. Starts and ends with a letter or digit.",
+      "submit": "Save",
+      "submitting": "Saving...",
+      "errors": {
+        "passwordRequired": "Enter your current password",
+        "usernameRequired": "Enter a username"
+      }
+    },
+    "avatar": {
+      "uploading": "Uploading...",
+      "uploaded": "Avatar updated",
+      "uploadFailed": "Failed to upload avatar",
+      "removed": "Avatar removed",
+      "removeFailed": "Failed to remove avatar",
+      "remove": "Remove avatar"
+    },
+    "vault": {
+      "saved": "Profile updated",
+      "saveFailed": "Failed to save profile"
+    },
+    "toastUsernameChanged": "Username updated",
+    "toastUsernameFailed": "Failed to change username",
     "changeEmail": {
       "title": "Change email",
       "currentPassword": "Current password",

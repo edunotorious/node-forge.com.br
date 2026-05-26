@@ -1,7 +1,12 @@
+import re
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+
+USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9_]{2,30}[a-z0-9]$")
 
 
 class RegisterRequest(BaseModel):
@@ -31,6 +36,12 @@ class UserResponse(BaseModel):
 
     id: uuid.UUID
     email: str
+    username: str | None = None
+    # Derived from the ORM's `has_avatar` property — the bytes themselves
+    # never travel over /auth/me; the client fetches /users/me/avatar to
+    # render.
+    has_avatar: bool = False
+    profile_json: dict[str, Any] = {}
     created_at: datetime
 
 
@@ -55,3 +66,19 @@ class EmailChangeRequest(BaseModel):
 class PasswordChangeRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
     new_password: str = Field(min_length=12, max_length=72)
+
+
+class UsernameChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_username: str = Field(min_length=4, max_length=32)
+
+    @field_validator("new_username")
+    @classmethod
+    def normalize_and_validate_username(cls, v: str) -> str:
+        v = v.lower().strip()
+        if not USERNAME_RE.match(v):
+            raise ValueError(
+                "Username must be 4–32 chars, lowercase letters / digits / underscore, "
+                "starting and ending with a letter or digit"
+            )
+        return v
