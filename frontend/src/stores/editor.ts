@@ -83,8 +83,10 @@ interface Actions {
   setConfig: (patch: Partial<GraphConfig>) => void;
   setProjectName: (name: string) => void;
   addVariable: (v: VariableDef) => void;
+  updateVariable: (id: string, patch: Partial<VariableDef>) => void;
   removeVariable: (id: string) => void;
   addFunction: (f: FunctionDef) => void;
+  updateFunction: (id: string, patch: Partial<FunctionDef>) => void;
   removeFunction: (id: string) => void;
   addClass: (c: ClassDef) => void;
   removeClass: (id: string) => void;
@@ -184,6 +186,13 @@ export const useEditor = create<State & Actions>((set) => ({
   setProjectName: (name) => set({ projectName: name, saveStatus: "dirty" }),
   addVariable: (v) =>
     set((s) => ({ variables: [...s.variables, v], saveStatus: "dirty" })),
+  updateVariable: (id, patch) =>
+    set((s) => ({
+      variables: s.variables.map((v) =>
+        v.id === id ? { ...v, ...patch } : v,
+      ),
+      saveStatus: "dirty",
+    })),
   removeVariable: (id) =>
     set((s) => ({
       variables: s.variables.filter((v) => v.id !== id),
@@ -191,6 +200,13 @@ export const useEditor = create<State & Actions>((set) => ({
     })),
   addFunction: (f) =>
     set((s) => ({ functions: [...s.functions, f], saveStatus: "dirty" })),
+  updateFunction: (id, patch) =>
+    set((s) => ({
+      functions: s.functions.map((f) =>
+        f.id === id ? { ...f, ...patch } : f,
+      ),
+      saveStatus: "dirty",
+    })),
   removeFunction: (id) =>
     set((s) => ({
       functions: s.functions.filter((f) => f.id !== id),

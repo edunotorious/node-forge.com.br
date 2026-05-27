@@ -153,7 +153,9 @@ def _build_terminal_wrapper(history: list[str], command: str) -> str:
       2. Runs `command`. If its LAST statement is an expression, prints
          its repr so the user sees a result — matches the Python REPL.
 
-    The full source travels as Python string literals via `repr()`, so we
+    Tracebacks are trimmed to hide the wrapper's internal frames so a
+    `print "x"` SyntaxError reads like `python3 -i` would print it. The
+    full source travels as Python string literals via `repr()`, so we
     never have to think about quoting / escaping the user's input.
     """
     hist_src = "\n".join(history)
@@ -161,6 +163,7 @@ def _build_terminal_wrapper(history: list[str], command: str) -> str:
 import ast as _ast
 import contextlib as _contextlib
 import io as _io
+import sys as _sys
 import traceback as _traceback
 
 _HIST_SRC = {hist_src!r}
@@ -170,9 +173,7 @@ _ns = {{}}
 
 # Replay history silently. History was already shown to the user on the
 # turn that produced it; suppressing output here keeps the new command's
-# output clean. Errors are swallowed for the same reason — the user
-# already saw them, and we don't want to mask the new command's output
-# with an old traceback.
+# output clean.
 _silent = _io.StringIO()
 with _contextlib.redirect_stdout(_silent), _contextlib.redirect_stderr(_silent):
     try:
@@ -180,28 +181,61 @@ with _contextlib.redirect_stdout(_silent), _contextlib.redirect_stderr(_silent):
     except Exception:
         pass
 
+
+def _emit_user_traceback(exc):
+    """Print only the user-facing piece of an exception, like CPython's
+    REPL does. For SyntaxError, that's just `format_exception_only`
+    (no traceback). For runtime errors, walk past the wrapper frames
+    (filenames that start with `_` or are this script) and start at the
+    first `<cmd>` frame."""
+    if isinstance(exc, SyntaxError):
+        _sys.stderr.write("".join(
+            _traceback.format_exception_only(type(exc), exc)
+        ))
+        return
+    tb = exc.__traceback__
+    while tb is not None and tb.tb_frame.f_code.co_filename not in (
+        "<cmd>",
+        "<stdin>",
+    ):
+        tb = tb.tb_next
+    _sys.stderr.write("".join(
+        _traceback.format_exception(type(exc), exc, tb)
+    ))
+
+
 # Run the new command. REPL semantics: a trailing expression prints its
 # repr; anything else just executes.
 try:
     _parsed = _ast.parse(_CMD_SRC, mode="exec")
-    if _parsed.body and isinstance(_parsed.body[-1], _ast.Expr):
-        _prior = _parsed.body[:-1]
-        _last = _parsed.body[-1]
-        if _prior:
-            exec(
-                compile(_ast.Module(body=_prior, type_ignores=[]), "<cmd>", "exec"),
+except SyntaxError as _se:
+    _emit_user_traceback(_se)
+else:
+    try:
+        if _parsed.body and isinstance(_parsed.body[-1], _ast.Expr):
+            _prior = _parsed.body[:-1]
+            _last = _parsed.body[-1]
+            if _prior:
+                exec(
+                    compile(
+                        _ast.Module(body=_prior, type_ignores=[]),
+                        "<cmd>",
+                        "exec",
+                    ),
+                    _ns,
+                )
+            _value = eval(
+                compile(_ast.Expression(body=_last.value), "<cmd>", "eval"),
                 _ns,
             )
-        _value = eval(
-            compile(_ast.Expression(body=_last.value), "<cmd>", "eval"),
-            _ns,
-        )
-        if _value is not None:
-            print(repr(_value))
-    else:
-        exec(_CMD_SRC, _ns)
-except Exception:
-    _traceback.print_exc()
+            if _value is not None:
+                print(repr(_value))
+        else:
+            exec(compile(_parsed, "<cmd>", "exec"), _ns)
+    except SystemExit:
+        raise
+    except BaseException as _e:
+        _emit_user_traceback(_e)
 '''
 
 

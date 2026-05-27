@@ -1,9 +1,12 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronRight, PencilLine, Plus, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
+import { FunctionDialog } from "@/components/editor/FunctionsSection";
+import { VariableDialog } from "@/components/editor/VariablesSection";
+import { VisibilityGlyph } from "@/components/editor/VisibilityGlyph";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,26 +19,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   TYPE_COLORS,
-  VARIABLE_TYPES,
   type ClassDef,
   type FunctionDef,
-  type ReturnType,
   type VariableDef,
-  type VariableType,
 } from "@/lib/graph-types";
-import { cn } from "@/lib/utils";
 import { useEditor } from "@/stores/editor";
 
-import { VisibilityGlyph } from "./VisibilityGlyph";
-
 const NAME_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const RETURN_TYPES: ReturnType[] = [...VARIABLE_TYPES, "None"];
 
 // "Classes" tab content. Each class is collapsible — when expanded it
 // shows three nested sub-sections (decorators, variables, methods) with
-// their own Add buttons. v1 doesn't distinguish instance vs class
-// variables — that's a Figma detail we leave for when someone asks. The
-// shape matches the codegen template in backend/src/runner/codegen.py.
+// their own Add buttons + inline edit. v1 doesn't distinguish instance vs
+// class variables. The shape matches the codegen template in
+// backend/src/runner/codegen.py.
 export function ClassesSection() {
   const t = useTranslations("editor");
   const tClasses = useTranslations("editor.classes");
@@ -110,16 +106,26 @@ function ClassCard({
       decorators: klass.decorators.filter((d) => d !== name),
     });
   }
-  function addVariable(v: VariableDef) {
-    updateClass(klass.id, { variables: [...klass.variables, v] });
+  function upsertVariable(v: VariableDef) {
+    const existing = klass.variables.findIndex((x) => x.id === v.id);
+    const next =
+      existing >= 0
+        ? klass.variables.map((x) => (x.id === v.id ? v : x))
+        : [...klass.variables, v];
+    updateClass(klass.id, { variables: next });
   }
   function removeVariable(id: string) {
     updateClass(klass.id, {
       variables: klass.variables.filter((v) => v.id !== id),
     });
   }
-  function addMethod(f: FunctionDef) {
-    updateClass(klass.id, { methods: [...klass.methods, f] });
+  function upsertMethod(m: FunctionDef) {
+    const existing = klass.methods.findIndex((x) => x.id === m.id);
+    const next =
+      existing >= 0
+        ? klass.methods.map((x) => (x.id === m.id ? m : x))
+        : [...klass.methods, m];
+    updateClass(klass.id, { methods: next });
   }
   function removeMethod(id: string) {
     updateClass(klass.id, {
@@ -166,12 +172,12 @@ function ClassCard({
           />
           <ClassVariablesBlock
             variables={klass.variables}
-            onAdd={addVariable}
+            onUpsert={upsertVariable}
             onRemove={removeVariable}
           />
           <ClassMethodsBlock
             methods={klass.methods}
-            onAdd={addMethod}
+            onUpsert={upsertMethod}
             onRemove={removeMethod}
           />
         </div>
@@ -276,43 +282,24 @@ function DecoratorsBlock({
 
 function ClassVariablesBlock({
   variables,
-  onAdd,
+  onUpsert,
   onRemove,
 }: {
   variables: VariableDef[];
-  onAdd: (v: VariableDef) => void;
+  onUpsert: (v: VariableDef) => void;
   onRemove: (id: string) => void;
 }) {
   const t = useTranslations("editor.classes");
-  const tVar = useTranslations("editor.variableDialog");
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [type, setType] = useState<VariableType>("Int");
-  const [value, setValue] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<VariableDef | null>(null);
 
-  function reset() {
-    setName("");
-    setType("Int");
-    setValue("");
-    setError(null);
+  function openCreate() {
+    setEditing(null);
+    setOpen(true);
   }
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return setError(tVar("nameRequired"));
-    if (!NAME_REGEX.test(name.trim())) return setError(tVar("nameInvalid"));
-    if (variables.some((v) => v.name === name.trim())) {
-      return setError(tVar("duplicateName"));
-    }
-    onAdd({
-      id: "cv-" + Math.random().toString(36).slice(2, 10),
-      name: name.trim(),
-      type,
-      value: value.trim(),
-    });
-    reset();
-    setOpen(false);
+  function openEdit(v: VariableDef) {
+    setEditing(v);
+    setOpen(true);
   }
 
   return (
@@ -329,125 +316,65 @@ function ClassVariablesBlock({
             {v.value && (
               <span className="truncate text-muted-foreground">= {v.value}</span>
             )}
-            <button
-              type="button"
-              onClick={() => onRemove(v.id)}
-              aria-label={t("removeAria")}
-              className="ml-auto hidden p-0.5 text-muted-foreground hover:text-destructive group-hover:inline-flex"
-            >
-              <X className="h-3 w-3" />
-            </button>
+            <div className="ml-auto hidden gap-0.5 group-hover:flex">
+              <button
+                type="button"
+                onClick={() => openEdit(v)}
+                aria-label={t("editAria")}
+                className="p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <PencilLine className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onRemove(v.id)}
+                aria-label={t("removeAria")}
+                className="p-0.5 text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
           </li>
         ))}
       </ul>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openCreate}
         className="mt-1 inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
       >
         <Plus className="h-3 w-3" /> {t("addVariable")}
       </button>
-      <Dialog
+      <VariableDialog
         open={open}
-        onOpenChange={(o) => {
-          setOpen(o);
-          if (!o) reset();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{tVar("title")}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={submit} className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="cv-name">{tVar("name")}</Label>
-              <Input
-                id="cv-name"
-                autoFocus
-                placeholder={tVar("namePlaceholder")}
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  setError(null);
-                }}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="cv-type">{tVar("type")}</Label>
-              <select
-                id="cv-type"
-                value={type}
-                onChange={(e) => setType(e.target.value as VariableType)}
-                className={cn(
-                  "h-9 w-full rounded-lg bg-input px-3 text-sm outline-none focus:ring-3 focus:ring-ring/50",
-                )}
-              >
-                {VARIABLE_TYPES.map((tk) => (
-                  <option key={tk} value={tk}>
-                    {tk}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="cv-value">{tVar("value")}</Label>
-              <Input
-                id="cv-value"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <DialogFooter>
-              <Button type="submit">{tVar("submit")}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setOpen}
+        editing={editing}
+        existingNames={variables.map((v) => v.name)}
+        onSubmit={onUpsert}
+      />
     </section>
   );
 }
 
 function ClassMethodsBlock({
   methods,
-  onAdd,
+  onUpsert,
   onRemove,
 }: {
   methods: FunctionDef[];
-  onAdd: (f: FunctionDef) => void;
+  onUpsert: (f: FunctionDef) => void;
   onRemove: (id: string) => void;
 }) {
   const t = useTranslations("editor.classes");
-  const tFn = useTranslations("editor.functionDialog");
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [returnType, setReturnType] = useState<ReturnType>("None");
-  const [body, setBody] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<FunctionDef | null>(null);
 
-  function reset() {
-    setName("");
-    setReturnType("None");
-    setBody("");
-    setError(null);
+  function openCreate() {
+    setEditing(null);
+    setOpen(true);
   }
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return setError(tFn("nameRequired"));
-    if (!NAME_REGEX.test(name.trim())) return setError(tFn("nameInvalid"));
-    if (methods.some((m) => m.name === name.trim())) {
-      return setError(tFn("duplicateName"));
-    }
-    onAdd({
-      id: "cm-" + Math.random().toString(36).slice(2, 10),
-      name: name.trim(),
-      return_type: returnType,
-      parameters: [],
-      body,
-    });
-    reset();
-    setOpen(false);
+  function openEdit(m: FunctionDef) {
+    setEditing(m);
+    setOpen(true);
   }
 
   return (
@@ -462,84 +389,41 @@ function ClassMethodsBlock({
             <span className="truncate text-muted-foreground">
               → {m.return_type}
             </span>
-            <button
-              type="button"
-              onClick={() => onRemove(m.id)}
-              aria-label={t("removeAria")}
-              className="ml-auto hidden p-0.5 text-muted-foreground hover:text-destructive group-hover:inline-flex"
-            >
-              <X className="h-3 w-3" />
-            </button>
+            <div className="ml-auto hidden gap-0.5 group-hover:flex">
+              <button
+                type="button"
+                onClick={() => openEdit(m)}
+                aria-label={t("editAria")}
+                className="p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <PencilLine className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onRemove(m.id)}
+                aria-label={t("removeAria")}
+                className="p-0.5 text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
           </li>
         ))}
       </ul>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openCreate}
         className="mt-1 inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
       >
         <Plus className="h-3 w-3" /> {t("addMethod")}
       </button>
-      <Dialog
+      <FunctionDialog
         open={open}
-        onOpenChange={(o) => {
-          setOpen(o);
-          if (!o) reset();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{tFn("title")}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={submit} className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="cm-name">{tFn("name")}</Label>
-              <Input
-                id="cm-name"
-                autoFocus
-                placeholder={tFn("namePlaceholder")}
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  setError(null);
-                }}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="cm-return">{tFn("returnType")}</Label>
-              <select
-                id="cm-return"
-                value={returnType}
-                onChange={(e) => setReturnType(e.target.value as ReturnType)}
-                className={cn(
-                  "h-9 w-full rounded-lg bg-input px-3 text-sm outline-none focus:ring-3 focus:ring-ring/50",
-                )}
-              >
-                {RETURN_TYPES.map((tk) => (
-                  <option key={tk} value={tk}>
-                    {tk}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="cm-body">{tFn("body")}</Label>
-              <textarea
-                id="cm-body"
-                rows={6}
-                placeholder={tFn("bodyPlaceholder")}
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                className="w-full resize-none rounded-lg bg-input px-3 py-2 font-mono text-xs outline-none focus:ring-3 focus:ring-ring/50"
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <DialogFooter>
-              <Button type="submit">{tFn("submit")}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setOpen}
+        editing={editing}
+        existingNames={methods.map((m) => m.name)}
+        onSubmit={onUpsert}
+      />
     </section>
   );
 }

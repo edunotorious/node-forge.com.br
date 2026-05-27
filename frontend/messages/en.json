@@ -201,27 +201,32 @@
       "addFunction": "Add function",
       "emptyVariables": "No variables defined.",
       "emptyFunctions": "No functions defined.",
-      "removeAria": "Remove"
+      "removeAria": "Remove",
+      "editAria": "Edit"
     },
     "variableDialog": {
       "title": "New variable",
+      "editTitle": "Edit variable",
       "name": "Name",
       "namePlaceholder": "e.g. my_var, _hidden, MY_CONST",
       "type": "Type",
       "value": "Initial value (optional)",
       "submit": "Add",
+      "editSubmit": "Save",
       "nameRequired": "Enter a name",
       "nameInvalid": "Invalid name (letters, digits and _)",
       "duplicateName": "A variable with that name already exists"
     },
     "functionDialog": {
       "title": "New function",
+      "editTitle": "Edit function",
       "name": "Name",
       "namePlaceholder": "e.g. my_func",
       "returnType": "Returns",
       "body": "Body (Python)",
       "bodyPlaceholder": "return ...",
       "submit": "Add",
+      "editSubmit": "Save",
       "nameRequired": "Enter a name",
       "nameInvalid": "Invalid name (letters, digits and _)",
       "duplicateName": "A function with that name already exists"

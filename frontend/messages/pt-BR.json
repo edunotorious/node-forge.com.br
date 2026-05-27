@@ -201,27 +201,32 @@
       "addFunction": "Add function",
       "emptyVariables": "Nenhuma variável definida.",
       "emptyFunctions": "Nenhuma função definida.",
-      "removeAria": "Remover"
+      "removeAria": "Remover",
+      "editAria": "Editar"
     },
     "variableDialog": {
       "title": "Nova variável",
+      "editTitle": "Editar variável",
       "name": "Nome",
       "namePlaceholder": "ex: my_var, _hidden, MY_CONST",
       "type": "Tipo",
       "value": "Valor inicial (opcional)",
       "submit": "Adicionar",
+      "editSubmit": "Salvar",
       "nameRequired": "Informe um nome",
       "nameInvalid": "Nome inválido (use letras, dígitos e _)",
       "duplicateName": "Já existe uma variável com esse nome"
     },
     "functionDialog": {
       "title": "Nova função",
+      "editTitle": "Editar função",
       "name": "Nome",
       "namePlaceholder": "ex: my_func",
       "returnType": "Retorna",
       "body": "Corpo (Python)",
       "bodyPlaceholder": "return ...",
       "submit": "Adicionar",
+      "editSubmit": "Salvar",
       "nameRequired": "Informe um nome",
       "nameInvalid": "Nome inválido (use letras, dígitos e _)",
       "duplicateName": "Já existe uma função com esse nome"

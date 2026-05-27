@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, X } from "lucide-react";
+import { PencilLine, Plus, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
@@ -27,15 +27,21 @@ import { useEditor } from "@/stores/editor";
 const NAME_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const RETURN_TYPES: ReturnType[] = [...VARIABLE_TYPES, "None"];
 
-// Functions are stored alongside variables in the per-file graph_json. v1
-// supports only name + return type + body; full signature editing
-// (parameters, decorators, generics) will come with the broader function-
-// node integration in a later phase.
 export function FunctionsSection() {
   const t = useTranslations("editor.details");
   const functions = useEditor((s) => s.functions);
   const removeFunction = useEditor((s) => s.removeFunction);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<FunctionDef | null>(null);
+
+  function openCreate() {
+    setEditing(null);
+    setOpen(true);
+  }
+  function openEdit(f: FunctionDef) {
+    setEditing(f);
+    setOpen(true);
+  }
 
   return (
     <section>
@@ -63,132 +69,177 @@ export function FunctionsSection() {
               <span className="truncate text-muted-foreground">
                 → {f.return_type}
               </span>
-              <button
-                type="button"
-                onClick={() => removeFunction(f.id)}
-                aria-label={t("removeAria")}
-                className="ml-auto hidden p-0.5 text-muted-foreground hover:text-destructive group-hover:inline-flex"
-              >
-                <X className="h-3 w-3" />
-              </button>
+              <div className="ml-auto hidden gap-0.5 group-hover:flex">
+                <button
+                  type="button"
+                  onClick={() => openEdit(f)}
+                  aria-label={t("editAria")}
+                  className="p-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <PencilLine className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeFunction(f.id)}
+                  aria-label={t("removeAria")}
+                  className="p-0.5 text-muted-foreground hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
             </li>
           );
         })}
       </ul>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openCreate}
         className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
       >
         <Plus className="h-3 w-3" /> {t("addFunction")}
       </button>
 
-      <NewFunctionDialog open={open} onOpenChange={setOpen} />
+      <FunctionDialog
+        open={open}
+        onOpenChange={setOpen}
+        editing={editing}
+        existingNames={functions.map((f) => f.name)}
+      />
     </section>
   );
 }
 
-function NewFunctionDialog({
+// Shared between top-level functions and class methods (ClassesSection
+// passes its own onSubmit + existingNames). Same key-based remount trick
+// as VariableDialog so useState reads fresh initial values from `editing`.
+export function FunctionDialog({
   open,
   onOpenChange,
+  editing,
+  existingNames,
+  onSubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  editing: FunctionDef | null;
+  existingNames: string[];
+  onSubmit?: (def: FunctionDef) => void;
 }) {
   const t = useTranslations("editor.functionDialog");
-  const functions = useEditor((s) => s.functions);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t(editing ? "editTitle" : "title")}</DialogTitle>
+        </DialogHeader>
+        <FunctionForm
+          key={editing?.id ?? "new"}
+          editing={editing}
+          existingNames={existingNames}
+          onSubmit={onSubmit}
+          onClose={() => onOpenChange(false)}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FunctionForm({
+  editing,
+  existingNames,
+  onSubmit,
+  onClose,
+}: {
+  editing: FunctionDef | null;
+  existingNames: string[];
+  onSubmit?: (def: FunctionDef) => void;
+  onClose: () => void;
+}) {
+  const t = useTranslations("editor.functionDialog");
   const addFunction = useEditor((s) => s.addFunction);
-  const [name, setName] = useState("");
-  const [returnType, setReturnType] = useState<ReturnType>("None");
-  const [body, setBody] = useState("");
+  const updateFunction = useEditor((s) => s.updateFunction);
+  const [name, setName] = useState(editing?.name ?? "");
+  const [returnType, setReturnType] = useState<ReturnType>(
+    editing?.return_type ?? "None",
+  );
+  const [body, setBody] = useState(editing?.body ?? "");
   const [error, setError] = useState<string | null>(null);
 
-  function reset() {
-    setName("");
-    setReturnType("None");
-    setBody("");
-    setError(null);
-  }
-
-  function onSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return setError(t("nameRequired"));
-    if (!NAME_REGEX.test(name.trim())) return setError(t("nameInvalid"));
-    if (functions.some((f) => f.name === name.trim())) {
-      return setError(t("duplicateName"));
-    }
+    const trimmed = name.trim();
+    if (!trimmed) return setError(t("nameRequired"));
+    if (!NAME_REGEX.test(trimmed)) return setError(t("nameInvalid"));
+    const others = editing
+      ? existingNames.filter((n) => n !== editing.name)
+      : existingNames;
+    if (others.includes(trimmed)) return setError(t("duplicateName"));
+
     const def: FunctionDef = {
-      id: "f-" + Math.random().toString(36).slice(2, 10),
-      name: name.trim(),
+      id: editing?.id ?? "f-" + Math.random().toString(36).slice(2, 10),
+      name: trimmed,
       return_type: returnType,
-      parameters: [],
-      body: body,
+      parameters: editing?.parameters ?? [],
+      body,
     };
-    addFunction(def);
-    onOpenChange(false);
-    reset();
+    if (onSubmit) {
+      onSubmit(def);
+    } else if (editing) {
+      updateFunction(editing.id, def);
+    } else {
+      addFunction(def);
+    }
+    onClose();
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        onOpenChange(o);
-        if (!o) reset();
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("title")}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-3">
-          <div className="space-y-1">
-            <Label htmlFor="fn-name">{t("name")}</Label>
-            <Input
-              id="fn-name"
-              autoFocus
-              placeholder={t("namePlaceholder")}
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setError(null);
-              }}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="fn-return">{t("returnType")}</Label>
-            <select
-              id="fn-return"
-              value={returnType}
-              onChange={(e) => setReturnType(e.target.value as ReturnType)}
-              className={cn(
-                "h-9 w-full rounded-lg bg-input px-3 text-sm outline-none focus:ring-3 focus:ring-ring/50",
-              )}
-            >
-              {RETURN_TYPES.map((tk) => (
-                <option key={tk} value={tk}>
-                  {tk}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="fn-body">{t("body")}</Label>
-            <textarea
-              id="fn-body"
-              rows={6}
-              placeholder={t("bodyPlaceholder")}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              className="w-full resize-none rounded-lg bg-input px-3 py-2 font-mono text-xs outline-none focus:ring-3 focus:ring-ring/50"
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <DialogFooter>
-            <Button type="submit">{t("submit")}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="space-y-1">
+        <Label htmlFor="fn-name">{t("name")}</Label>
+        <Input
+          id="fn-name"
+          autoFocus
+          placeholder={t("namePlaceholder")}
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            setError(null);
+          }}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="fn-return">{t("returnType")}</Label>
+        <select
+          id="fn-return"
+          value={returnType}
+          onChange={(e) => setReturnType(e.target.value as ReturnType)}
+          className={cn(
+            "h-9 w-full rounded-lg bg-input px-3 text-sm outline-none focus:ring-3 focus:ring-ring/50",
+          )}
+        >
+          {RETURN_TYPES.map((tk) => (
+            <option key={tk} value={tk}>
+              {tk}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="fn-body">{t("body")}</Label>
+        <textarea
+          id="fn-body"
+          rows={6}
+          placeholder={t("bodyPlaceholder")}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          className="w-full resize-none rounded-lg bg-input px-3 py-2 font-mono text-xs outline-none focus:ring-3 focus:ring-ring/50"
+        />
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <DialogFooter>
+        <Button type="submit">{t(editing ? "editSubmit" : "submit")}</Button>
+      </DialogFooter>
+    </form>
   );
 }
