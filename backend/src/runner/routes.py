@@ -12,7 +12,11 @@ from src.auth.deps import get_current_user
 from src.config import get_settings
 from src.db.models import ExecutionJob, Project, ProjectFile, User
 from src.db.session import SessionLocal, get_session
-from src.runner.codegen import GraphCycleError, generate_python
+from src.runner.codegen import (
+    GraphCycleError,
+    generate_preamble,
+    generate_python,
+)
 from src.runner.schemas import JobResponse, TerminalRequest, TerminalResponse
 
 router = APIRouter(tags=["runner"])
@@ -239,15 +243,35 @@ else:
 '''
 
 
-@router.post("/terminal", response_model=TerminalResponse)
+@router.post(
+    "/projects/{project_id}/files/{file_id}/terminal",
+    response_model=TerminalResponse,
+)
 async def terminal(
+    project_id: uuid.UUID,
+    file_id: uuid.UUID,
     data: TerminalRequest,
     user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TerminalResponse:
-    """Stateless REPL. The client owns the conversation history; we just
-    forward a wrapped script to the executor and return whatever the new
-    command printed. Each call spawns a fresh runner container."""
-    script = _build_terminal_wrapper(data.history, data.command)
+    """Stateless-per-call REPL scoped to a specific file. Each request
+    rebuilds the namespace by running:
+      1. The file's preamble (its Variables, Functions and Classes)
+         silently.
+      2. The client-tracked `history` of past commands silently.
+      3. The new `command` with output captured.
+
+    Scoping to a file lets users reference their declared items in the
+    REPL the same way they would in the file's own generated script —
+    e.g. a class `Point` becomes `Point` (not just an unbound name)
+    inside the terminal.
+    """
+    file = await _get_owned_file(session, project_id, file_id, user.id)
+    preamble = generate_preamble(file.graph_json)
+    # Prepend the preamble as a synthetic first history entry so the
+    # wrapper executes it silently before anything the user typed.
+    history_with_preamble = ([preamble] + data.history) if preamble else data.history
+    script = _build_terminal_wrapper(history_with_preamble, data.command)
     timeout = _settings.executor_timeout_seconds + 10
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:

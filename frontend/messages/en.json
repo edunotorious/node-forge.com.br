@@ -233,7 +233,7 @@
       "duplicateName": "A function with that name already exists"
     },
     "terminal": {
-      "banner": "Python REPL running in the sandbox. State persists across commands while the tab is open.",
+      "banner": "Python REPL in the sandbox — the file's Variables, Functions and Classes load automatically. State persists across commands while the tab is open. Class attributes are accessed as ClassName.name.",
       "prompt": ">",
       "inputAria": "Terminal command",
       "running": "running...",

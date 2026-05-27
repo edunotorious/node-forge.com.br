@@ -233,7 +233,7 @@
       "duplicateName": "Já existe uma função com esse nome"
     },
     "terminal": {
-      "banner": "REPL Python rodando no sandbox. Estado persiste entre comandos enquanto a aba está aberta.",
+      "banner": "REPL Python no sandbox — as Variáveis, Funções e Classes do arquivo são carregadas automaticamente. Estado persiste entre comandos enquanto a aba está aberta. Atributos de classe se acessam por NomeDaClasse.nome.",
       "prompt": ">",
       "inputAria": "Comando do terminal",
       "running": "executando...",

@@ -114,21 +114,62 @@ def _topo_sort(
     return [node_by_id[i] for i in sorted_ids]
 
 
+_BOOL_TRUE = {"true", "yes", "1", "y", "t"}
+_BOOL_FALSE = {"false", "no", "0", "n", "f"}
+
+
+def _coerce_value(type_name: str, raw_value: str) -> str:
+    """Turn the user's free-form string into a Python literal of the
+    declared type. Forgiving on the cases where the dialog's "value" field
+    naturally collects shorthand:
+
+      * Str  — wraps in repr() so `FIAP` becomes `"FIAP"`. If the user
+               already wrote a string literal (`'x'` or `"x"`), we leave
+               it alone.
+      * Bool — accepts true/false/yes/no/1/0 (any case) and emits True or
+               False. Anything else falls through to the user's literal so
+               valid Python like `not x` still works.
+      * Int / Float / List / Dict — emitted as-is. Bad input is the user's
+               problem and surfaces as a Python error in the Console.
+
+    Empty value falls back to the type's natural default ("" → 0, "" → "",
+    "" → False, etc.).
+    """
+    raw = raw_value.strip()
+    if not raw:
+        return _DEFAULT_LITERAL.get(type_name, "None")
+
+    if type_name == "Str":
+        # Already a string literal? Trust it.
+        if (raw.startswith("'") and raw.endswith("'")) or (
+            raw.startswith('"') and raw.endswith('"')
+        ):
+            return raw
+        return repr(raw)
+
+    if type_name == "Bool":
+        lower = raw.lower()
+        if lower in _BOOL_TRUE:
+            return "True"
+        if lower in _BOOL_FALSE:
+            return "False"
+        return raw
+
+    return raw
+
+
 def _emit_variable(v: dict[str, Any]) -> list[str]:
-    """One `name: type = value` line per user-defined variable. We trust
-    the value field verbatim — it's whatever the user typed in the dialog
-    — and rely on the executor sandbox as the safety net. Bad values
-    surface as Python SyntaxError / NameError at run time, which lands in
-    `stderr` and reaches the Console tab cleanly."""
+    """One `name: type = value` line per user-defined variable. The value
+    is coerced per type (see `_coerce_value`) so `Str FIAP` becomes
+    `name: str = "FIAP"` instead of a NameError at execution time."""
     name = (v.get("name") or "").strip()
     if not name:
         return []
     type_name = v.get("type", "Int")
     py_type = _PY_TYPE.get(type_name, "object")
     raw_value = (v.get("value") or "").strip()
-    if not raw_value:
-        raw_value = _DEFAULT_LITERAL.get(type_name, "None")
-    return [f"{name}: {py_type} = {raw_value}"]
+    value = _coerce_value(type_name, raw_value)
+    return [f"{name}: {py_type} = {value}"]
 
 
 def _emit_method(f: dict[str, Any]) -> list[str]:
@@ -255,6 +296,45 @@ def _emit_gate(node: dict[str, Any]) -> list[str]:
     return [f"# unknown node type: {ntype!r}"]
 
 
+def _emit_user_defs(
+    variables: list[dict[str, Any]],
+    functions: list[dict[str, Any]],
+    classes: list[dict[str, Any]],
+) -> list[str]:
+    """Lines for the user-defined items (vars + funcs + classes) only.
+    Shared by `generate_python` (full circuit script) and
+    `generate_preamble` (Terminal REPL preamble)."""
+    lines: list[str] = []
+    if variables:
+        lines.append("# Variables")
+        for v in variables:
+            lines.extend(_emit_variable(v))
+    if functions:
+        if lines:
+            lines.append("")
+        lines.append("# Functions")
+        for f in functions:
+            lines.extend(_emit_function(f))
+    if classes:
+        if lines:
+            lines.append("")
+        lines.append("# Classes")
+        for c in classes:
+            lines.extend(_emit_class(c))
+    return lines
+
+
+def generate_preamble(graph: dict[str, Any]) -> str:
+    """Just the user-defined items, no QuantumCircuit / gates / run.
+    The Terminal REPL feeds this in silently before history so a user can
+    reference everything they declared in Details + Classes."""
+    variables = graph.get("variables") or []
+    functions = graph.get("functions") or []
+    classes = graph.get("classes") or []
+    lines = _emit_user_defs(variables, functions, classes)
+    return "\n".join(lines)
+
+
 def generate_python(graph: dict[str, Any]) -> str:
     """Turn a graph_json into a Qiskit script string.
 
@@ -290,25 +370,12 @@ def generate_python(graph: dict[str, Any]) -> str:
         lines.append("matplotlib.use('Agg')")
         lines.append("from qiskit.visualization import plot_histogram")
 
-    # User-defined variables and functions sit between imports and the
-    # QuantumCircuit setup so the rest of the script can see them. v1
-    # doesn't connect them to canvas nodes — they're emitted unconditionally
-    # and are referenceable from any future Python-node type we add.
-    if variables:
+    # User-defined items between imports and the QuantumCircuit setup so
+    # the rest of the script can see them.
+    user_defs = _emit_user_defs(variables, functions, classes)
+    if user_defs:
         lines.append("")
-        lines.append("# Variables")
-        for v in variables:
-            lines.extend(_emit_variable(v))
-    if functions:
-        lines.append("")
-        lines.append("# Functions")
-        for f in functions:
-            lines.extend(_emit_function(f))
-    if classes:
-        lines.append("")
-        lines.append("# Classes")
-        for c in classes:
-            lines.extend(_emit_class(c))
+        lines.extend(user_defs)
 
     lines.append("")
     lines.append(f"qc = QuantumCircuit({num_qubits}, {num_classical})")

@@ -4,6 +4,8 @@ import { Loader2, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
+import { useEditor } from "@/stores/editor";
+
 // One entry in the visible scrollback. The prompt is rendered with the
 // command; stdout/stderr come back from the executor and are stored
 // raw — TerminalView renders them as <pre> so newlines / indentation
@@ -26,6 +28,8 @@ interface TerminalResponse {
 // lives only in the client; closing the tab drops it.
 export function TerminalView() {
   const t = useTranslations("editor.terminal");
+  const projectId = useEditor((s) => s.projectId);
+  const fileId = useEditor((s) => s.fileId);
   const [entries, setEntries] = useState<TerminalEntry[]>([]);
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
@@ -42,16 +46,19 @@ export function TerminalView() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const cmd = input.trim();
-    if (!cmd || running) return;
+    if (!cmd || running || !projectId || !fileId) return;
     setRunning(true);
     setInput("");
     const history = entries.map((e) => e.command);
     try {
-      const res = await fetch("/api/terminal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history, command: cmd }),
-      });
+      const res = await fetch(
+        `/api/projects/${projectId}/files/${fileId}/terminal`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ history, command: cmd }),
+        },
+      );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail ?? `HTTP ${res.status}`);
