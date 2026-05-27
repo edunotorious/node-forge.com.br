@@ -1,7 +1,10 @@
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.deps import get_current_user
@@ -10,16 +13,27 @@ from src.auth.password import dummy_verify, hash_password, verify_password
 from src.auth.rate_limit import limiter
 from src.auth.schemas import (
     EmailChangeRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     PasswordChangeRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserResponse,
     UsernameChangeRequest,
 )
 from src.config import get_settings
-from src.db.models import User
+from src.db.models import PasswordResetToken, User
 from src.db.session import get_session
+
+# How long a reset token stays valid. Long enough for a user to dig the email
+# out of spam, short enough that a leaked link expires before a casual
+# attacker can act.
+_RESET_TOKEN_TTL = timedelta(hours=1)
+
+
+def _hash_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -197,3 +211,104 @@ async def change_username(
     await session.commit()
     await session.refresh(user)
     return user
+
+
+@router.post(
+    "/forgot-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+@limiter.limit("3/hour")
+async def forgot_password(
+    request: Request,
+    data: ForgotPasswordRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    """Always returns 204. The response is identical whether the email is
+    registered or not — leaking that information would let an attacker
+    enumerate accounts via the reset endpoint. When the address IS
+    registered, we mint a fresh single-use token, invalidate any prior
+    unused ones, and (for now) log the reset link to stdout.
+
+    Production hook: replace the stdout log with an email send. Stash that
+    behind a `RESET_EMAIL_BACKEND` env var so dev keeps the log behaviour.
+    """
+    stmt = select(User).where(User.email == data.email)
+    user = (await session.execute(stmt)).scalar_one_or_none()
+    if user is None:
+        # Burn an equivalent slice of time so the 204-vs-204 timing also
+        # doesn't leak the answer.
+        dummy_verify(data.email)
+        return
+
+    # Invalidate any outstanding unused tokens — only one valid token per
+    # user at a time keeps the audit story simple.
+    await session.execute(
+        update(PasswordResetToken)
+        .where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+        )
+        .values(used_at=datetime.now(timezone.utc))
+    )
+
+    raw = secrets.token_urlsafe(32)
+    token = PasswordResetToken(
+        user_id=user.id,
+        token_hash=_hash_token(raw),
+        expires_at=datetime.now(timezone.utc) + _RESET_TOKEN_TTL,
+    )
+    session.add(token)
+    await session.commit()
+
+    # Dev delivery: print so the line surfaces in `docker compose logs
+    # backend` without depending on the Python logging config. Production
+    # wires this up to an email service via a follow-up; the raw token
+    # NEVER goes to a channel a third party can read.
+    print(
+        f"PASSWORD RESET LINK for {user.email}: "
+        f"/reset-password?token={raw}",
+        flush=True,
+    )
+
+
+@router.post(
+    "/reset-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+@limiter.limit("5/hour")
+async def reset_password(
+    request: Request,
+    data: ResetPasswordRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    """Validate the token, swap the user's password, mark the token used.
+    Token validation is a single query keyed on the hash — never on the
+    user id, so brute-forcing user IDs gets you nowhere."""
+    now = datetime.now(timezone.utc)
+    stmt = (
+        select(PasswordResetToken)
+        .where(
+            PasswordResetToken.token_hash == _hash_token(data.token),
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.expires_at > now,
+        )
+    )
+    token = (await session.execute(stmt)).scalar_one_or_none()
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+
+    user = await session.get(User, token.user_id)
+    if user is None:
+        # User was deleted between request and reset — token had nothing
+        # to point at. Surface as the same 400 to avoid leaking lifecycle.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+
+    user.password_hash = hash_password(data.new_password)
+    token.used_at = now
+    await session.commit()

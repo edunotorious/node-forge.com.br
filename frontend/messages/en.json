@@ -19,11 +19,41 @@
       "submitting": "Signing in...",
       "registerCta": "New User",
       "forgotPassword": "Forgot your password?",
-      "forgotPasswordComingSoon": "Coming soon",
       "errors": {
         "invalidEmail": "Invalid email",
         "passwordRequired": "Enter your password",
         "loginFailed": "Login failed"
+      }
+    },
+    "forgotPassword": {
+      "title": "Recover password",
+      "description": "Enter your email. If an account exists, we'll send a reset link.",
+      "email": "Email",
+      "submit": "Send link",
+      "submitting": "Sending...",
+      "successTitle": "Check your email",
+      "successBody": "If an account exists for that email, a reset link has been sent. Check your inbox (and spam).",
+      "backToLogin": "Back to sign in",
+      "errors": {
+        "invalidEmail": "Invalid email",
+        "requestFailed": "Couldn't process the request"
+      }
+    },
+    "resetPassword": {
+      "title": "Set a new password",
+      "description": "Pick a new password for your account.",
+      "newPassword": "New password",
+      "newPasswordHint": "Minimum 12 characters.",
+      "submit": "Save password",
+      "submitting": "Saving...",
+      "successTitle": "Password reset",
+      "successBody": "Your password is updated. You can sign in now.",
+      "goToLogin": "Go to sign in",
+      "missingToken": "Invalid reset link. Request a new one.",
+      "errors": {
+        "passwordMin": "Password must be at least 12 characters",
+        "passwordMax": "Maximum 72 characters",
+        "resetFailed": "Couldn't reset password. The link may be expired."
       }
     },
     "register": {

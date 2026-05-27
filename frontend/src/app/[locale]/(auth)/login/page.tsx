@@ -126,12 +126,12 @@ function LoginForm() {
           <Link href="/register" className="underline hover:opacity-70">
             {t("registerCta")}
           </Link>
-          <span
-            className="cursor-not-allowed underline opacity-60"
-            title={t("forgotPasswordComingSoon")}
+          <Link
+            href="/forgot-password"
+            className="underline hover:opacity-70"
           >
             {t("forgotPassword")}
-          </span>
+          </Link>
         </div>
 
         {mutation.isError && (

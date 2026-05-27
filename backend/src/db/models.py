@@ -74,6 +74,37 @@ class User(Base):
         return self.avatar_data is not None
 
 
+class PasswordResetToken(Base):
+    """Single-use token for the /auth/forgot-password flow.
+
+    The row stores SHA-256(raw_token), never the raw bytes. The raw token
+    only travels in the email body (or the dev stdout log). Used tokens
+    stay in the table for audit — the lookup explicitly filters
+    `used_at IS NULL AND expires_at > now()`.
+    """
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class Project(Base):
     __tablename__ = "projects"
 

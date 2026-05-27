@@ -19,11 +19,41 @@
       "submitting": "Entrando...",
       "registerCta": "Novo usuário",
       "forgotPassword": "Esqueceu sua senha?",
-      "forgotPasswordComingSoon": "Em breve",
       "errors": {
         "invalidEmail": "Email inválido",
         "passwordRequired": "Informe sua senha",
         "loginFailed": "Erro ao fazer login"
+      }
+    },
+    "forgotPassword": {
+      "title": "Recuperar senha",
+      "description": "Informe seu email. Se houver uma conta cadastrada, enviaremos um link de redefinição.",
+      "email": "Email",
+      "submit": "Enviar link",
+      "submitting": "Enviando...",
+      "successTitle": "Verifique seu email",
+      "successBody": "Se houver uma conta com esse email, um link de redefinição foi enviado. Cheque sua caixa de entrada (e o spam).",
+      "backToLogin": "Voltar para o login",
+      "errors": {
+        "invalidEmail": "Email inválido",
+        "requestFailed": "Não foi possível processar o pedido"
+      }
+    },
+    "resetPassword": {
+      "title": "Definir nova senha",
+      "description": "Escolha uma nova senha pra sua conta.",
+      "newPassword": "Nova senha",
+      "newPasswordHint": "Mínimo 12 caracteres.",
+      "submit": "Salvar senha",
+      "submitting": "Salvando...",
+      "successTitle": "Senha redefinida",
+      "successBody": "Sua senha foi atualizada. Você já pode entrar.",
+      "goToLogin": "Ir para o login",
+      "missingToken": "Link de redefinição inválido. Solicite um novo.",
+      "errors": {
+        "passwordMin": "A senha precisa ter pelo menos 12 caracteres",
+        "passwordMax": "Máximo 72 caracteres",
+        "resetFailed": "Não foi possível redefinir a senha. O link pode estar expirado."
       }
     },
     "register": {

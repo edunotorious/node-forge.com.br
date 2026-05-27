@@ -68,6 +68,22 @@ class PasswordChangeRequest(BaseModel):
     new_password: str = Field(min_length=12, max_length=72)
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.lower().strip()
+
+
+class ResetPasswordRequest(BaseModel):
+    # Raw URL-safe token from the reset link. SHA-256(token) gets compared
+    # against `password_reset_tokens.token_hash`.
+    token: str = Field(min_length=20, max_length=128)
+    new_password: str = Field(min_length=12, max_length=72)
+
+
 class UsernameChangeRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
     new_username: str = Field(min_length=4, max_length=32)
