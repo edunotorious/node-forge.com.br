@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 import httpx
@@ -62,7 +62,7 @@ async def _run_in_background(job_id: uuid.UUID, code: str) -> None:
             return  # cancelled / already cleaned up — give up silently
 
         job.status = "running"
-        job.started_at = datetime.now(timezone.utc)
+        job.started_at = datetime.now(UTC)
         await session.commit()
 
         # Grace = executor cap + a small buffer for transport + container
@@ -87,7 +87,7 @@ async def _run_in_background(job_id: uuid.UUID, code: str) -> None:
             job.status = "error"
             job.error_message = f"Executor call failed: {exc}"
 
-        job.finished_at = datetime.now(timezone.utc)
+        job.finished_at = datetime.now(UTC)
         await session.commit()
 
 

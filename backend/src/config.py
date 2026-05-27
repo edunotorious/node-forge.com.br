@@ -24,6 +24,16 @@ class Settings(BaseSettings):
     # over plain HTTP refuses to send Secure cookies — set False in .env when
     # exercising endpoints with curl/cookies.txt.
     cookie_secure: bool = True
+    # Outbound email. `stdout` keeps the dev-only "print the link to logs"
+    # behaviour; flip to `resend` in prod to actually send via the Resend
+    # API (https://resend.com).
+    email_backend: str = "stdout"
+    email_from: str = "Node-Forge <onboarding@resend.dev>"
+    resend_api_key: str = ""
+    # Used to build absolute URLs inside the email body. Browser-facing
+    # origin — http://localhost:3000 in dev, https://node-forge.com.br
+    # once deployed.
+    app_base_url: str = "http://localhost:3000"
 
 
 @lru_cache

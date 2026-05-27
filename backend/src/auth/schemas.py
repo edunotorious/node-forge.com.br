@@ -5,7 +5,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-
 USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9_]{2,30}[a-z0-9]$")
 
 

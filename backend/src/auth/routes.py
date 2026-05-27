@@ -1,9 +1,17 @@
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,12 +27,14 @@ from src.auth.schemas import (
     RegisterRequest,
     ResetPasswordRequest,
     TokenResponse,
-    UserResponse,
     UsernameChangeRequest,
+    UserResponse,
 )
 from src.config import get_settings
 from src.db.models import PasswordResetToken, User
 from src.db.session import get_session
+from src.email.sender import send_password_reset
+from src.email.templates import pick_locale
 
 # How long a reset token stays valid. Long enough for a user to dig the email
 # out of spam, short enough that a leaked link expires before a casual
@@ -221,6 +231,7 @@ async def change_username(
 async def forgot_password(
     request: Request,
     data: ForgotPasswordRequest,
+    background: BackgroundTasks,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
     """Always returns 204. The response is identical whether the email is
@@ -248,27 +259,26 @@ async def forgot_password(
             PasswordResetToken.user_id == user.id,
             PasswordResetToken.used_at.is_(None),
         )
-        .values(used_at=datetime.now(timezone.utc))
+        .values(used_at=datetime.now(UTC))
     )
 
     raw = secrets.token_urlsafe(32)
     token = PasswordResetToken(
         user_id=user.id,
         token_hash=_hash_token(raw),
-        expires_at=datetime.now(timezone.utc) + _RESET_TOKEN_TTL,
+        expires_at=datetime.now(UTC) + _RESET_TOKEN_TTL,
     )
     session.add(token)
     await session.commit()
 
-    # Dev delivery: print so the line surfaces in `docker compose logs
-    # backend` without depending on the Python logging config. Production
-    # wires this up to an email service via a follow-up; the raw token
-    # NEVER goes to a channel a third party can read.
-    print(
-        f"PASSWORD RESET LINK for {user.email}: "
-        f"/reset-password?token={raw}",
-        flush=True,
-    )
+    # Delivery runs AFTER the 204 response is on the wire — keeps the
+    # response time identical between "user exists" and "user doesn't",
+    # which is the same enumeration defence the 204-always policy is
+    # serving. send_password_reset() swallows its own errors so a flaky
+    # provider can't flip the response into a 5xx (which would itself be
+    # an enumeration signal).
+    locale = pick_locale(request.headers.get("accept-language"))
+    background.add_task(send_password_reset, user.email, raw, locale)
 
 
 @router.post(
@@ -284,7 +294,7 @@ async def reset_password(
     """Validate the token, swap the user's password, mark the token used.
     Token validation is a single query keyed on the hash — never on the
     user id, so brute-forcing user IDs gets you nowhere."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stmt = (
         select(PasswordResetToken)
         .where(

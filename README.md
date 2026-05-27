@@ -63,6 +63,29 @@ executor/   FastAPI mínimo + Docker SDK (sandbox de código de usuário).
 infra/      Stubs Terraform e docs de deploy (TODO).
 ```
 
+## Envio de email (recuperação de senha)
+
+Por padrão o backend roda com `EMAIL_BACKEND=stdout` — o link de recuperação aparece
+em `docker compose logs backend` em vez de ir pra um email real. Ótimo pra dev e pra
+testes locais.
+
+Pra ativar envio real via [Resend](https://resend.com) (free tier 100 emails/dia, 3k/mês):
+
+1. Cria conta em resend.com (free).
+2. Em "API Keys" gera uma key e copia.
+3. No `.env`:
+   ```bash
+   EMAIL_BACKEND=resend
+   RESEND_API_KEY=re_xxxxxxxxxxxx
+   EMAIL_FROM="Node-Forge <onboarding@resend.dev>"   # funciona sem verificar domínio
+   APP_BASE_URL=https://seu-dominio.com               # ou http://localhost:3000 em dev
+   ```
+4. Restart o backend (`docker compose restart backend`).
+
+Pra trocar o `from` por algo no seu domínio (`no-reply@node-forge.com.br`), você precisa
+verificar o domínio no Resend e configurar os registros DNS (SPF, DKIM) que eles vão
+mostrar no dashboard.
+
 ## Deploy na Oracle Cloud (TODO)
 
 Será feito em fase posterior. Stubs Terraform vão em `infra/oci/`. Pontos abertos:
