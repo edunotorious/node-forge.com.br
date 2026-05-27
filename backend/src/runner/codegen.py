@@ -48,6 +48,30 @@ _SINGLE_QUBIT_GATE = {
     NODE_PAULI_Z: "z",
 }
 
+# Maps the frontend's variable-type tag (see lib/graph-types.ts:VARIABLE_TYPES)
+# to a Python type expression usable in an annotation. None is kept as a
+# string for return-type emission.
+_PY_TYPE = {
+    "Int": "int",
+    "Float": "float",
+    "Str": "str",
+    "Bool": "bool",
+    "List": "list",
+    "Dict": "dict",
+    "None": "None",
+}
+
+# Default Python literal for each type when the user did not supply a value.
+# Mirrors what `0` / `""` / `False` would naturally be for the type.
+_DEFAULT_LITERAL = {
+    "Int": "0",
+    "Float": "0.0",
+    "Str": '""',
+    "Bool": "False",
+    "List": "[]",
+    "Dict": "{}",
+}
+
 
 def _topo_sort(
     nodes: list[dict[str, Any]], edges: list[dict[str, Any]]
@@ -90,6 +114,53 @@ def _topo_sort(
     return [node_by_id[i] for i in sorted_ids]
 
 
+def _emit_variable(v: dict[str, Any]) -> list[str]:
+    """One `name: type = value` line per user-defined variable. We trust
+    the value field verbatim — it's whatever the user typed in the dialog
+    — and rely on the executor sandbox as the safety net. Bad values
+    surface as Python SyntaxError / NameError at run time, which lands in
+    `stderr` and reaches the Console tab cleanly."""
+    name = (v.get("name") or "").strip()
+    if not name:
+        return []
+    type_name = v.get("type", "Int")
+    py_type = _PY_TYPE.get(type_name, "object")
+    raw_value = (v.get("value") or "").strip()
+    if not raw_value:
+        raw_value = _DEFAULT_LITERAL.get(type_name, "None")
+    return [f"{name}: {py_type} = {raw_value}"]
+
+
+def _emit_function(f: dict[str, Any]) -> list[str]:
+    """Emit a `def name(params) -> return_type: body` block. Parameters are
+    typed too. Empty body becomes `pass` so the def parses."""
+    name = (f.get("name") or "").strip()
+    if not name:
+        return []
+    return_type = f.get("return_type", "None")
+    py_return = _PY_TYPE.get(return_type, "None")
+
+    params = f.get("parameters") or []
+    params_parts: list[str] = []
+    for p in params:
+        pname = (p.get("name") or "").strip()
+        if not pname:
+            continue
+        ptype = _PY_TYPE.get(p.get("type", "Int"), "object")
+        params_parts.append(f"{pname}: {ptype}")
+    params_str = ", ".join(params_parts)
+
+    body = f.get("body") or ""
+    body_lines = [ln for ln in body.splitlines() if ln.strip() != ""]
+    if not body_lines:
+        body_lines = ["pass"]
+    return [
+        f"def {name}({params_str}) -> {py_return}:",
+        *[f"    {line}" for line in body_lines],
+        "",
+    ]
+
+
 def _emit_gate(node: dict[str, Any]) -> list[str]:
     """Lines of Python for a single non-execution node. Unknown node types
     are emitted as a Python comment so the script stays runnable — silently
@@ -129,6 +200,8 @@ def generate_python(graph: dict[str, Any]) -> str:
     nodes = graph.get("nodes") or []
     edges = graph.get("edges") or []
     config = graph.get("config") or {}
+    variables = graph.get("variables") or []
+    functions = graph.get("functions") or []
 
     num_qubits = max(1, int(config.get("num_qubits", 2)))
     num_classical = max(1, int(config.get("num_classical", 2)))
@@ -149,6 +222,22 @@ def generate_python(graph: dict[str, Any]) -> str:
         lines.append("import matplotlib")
         lines.append("matplotlib.use('Agg')")
         lines.append("from qiskit.visualization import plot_histogram")
+
+    # User-defined variables and functions sit between imports and the
+    # QuantumCircuit setup so the rest of the script can see them. v1
+    # doesn't connect them to canvas nodes — they're emitted unconditionally
+    # and are referenceable from any future Python-node type we add.
+    if variables:
+        lines.append("")
+        lines.append("# Variables")
+        for v in variables:
+            lines.extend(_emit_variable(v))
+    if functions:
+        lines.append("")
+        lines.append("# Functions")
+        for f in functions:
+            lines.extend(_emit_function(f))
+
     lines.append("")
     lines.append(f"qc = QuantumCircuit({num_qubits}, {num_classical})")
 
