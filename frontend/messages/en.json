@@ -175,6 +175,7 @@
       "variablesLabel": "Variables",
       "methodsLabel": "Methods",
       "removeAria": "Remove",
+      "editAria": "Edit",
       "expandAria": "Expand",
       "collapseAria": "Collapse",
       "newClassTitle": "New class",
