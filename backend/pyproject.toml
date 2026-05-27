@@ -17,6 +17,9 @@ dependencies = [
     # Required by FastAPI for UploadFile / multipart form bodies (avatar
     # upload). Without it the app errors out at startup.
     "python-multipart>=0.0.18,<1",
+    # In-memory rate limiting on auth endpoints. Backed by the `limits`
+    # library; swap the storage URI to redis://… when we go multi-worker.
+    "slowapi>=0.1.9,<1",
 ]
 
 [dependency-groups]

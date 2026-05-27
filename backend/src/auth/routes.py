@@ -1,12 +1,13 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.deps import get_current_user
 from src.auth.jwt import create_access_token
 from src.auth.password import dummy_verify, hash_password, verify_password
+from src.auth.rate_limit import limiter
 from src.auth.schemas import (
     EmailChangeRequest,
     LoginRequest,
@@ -43,7 +44,9 @@ def _set_auth_cookie(response: Response, token: str) -> None:
     status_code=status.HTTP_201_CREATED,
     response_model=UserResponse,
 )
+@limiter.limit("3/minute")
 async def register(
+    request: Request,
     data: RegisterRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> User:
@@ -63,7 +66,9 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     data: LoginRequest,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -107,7 +112,9 @@ async def logout(response: Response) -> None:
 
 
 @router.patch("/me/email", response_model=UserResponse)
+@limiter.limit("5/hour")
 async def change_email(
+    request: Request,
     data: EmailChangeRequest,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -142,7 +149,9 @@ async def change_email(
 
 
 @router.patch("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/hour")
 async def change_password(
+    request: Request,
     data: PasswordChangeRequest,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -158,7 +167,9 @@ async def change_password(
 
 
 @router.patch("/me/username", response_model=UserResponse)
+@limiter.limit("5/hour")
 async def change_username(
+    request: Request,
     data: UsernameChangeRequest,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
