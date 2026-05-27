@@ -12,6 +12,7 @@ import { FileTabsBar } from "@/components/editor/FileTabsBar";
 import { LeftPanel } from "@/components/editor/LeftPanel";
 import {
   DEFAULT_CONFIG,
+  type ClassDef,
   type ExecutionJob,
   type FunctionDef,
   type GraphConfig,
@@ -33,6 +34,7 @@ interface EditorProps {
       config: Partial<GraphConfig>;
       variables: VariableDef[];
       functions: FunctionDef[];
+      classes: ClassDef[];
     };
   };
 }
@@ -59,6 +61,7 @@ export function Editor({ initial }: EditorProps) {
       config: { ...DEFAULT_CONFIG, ...(initial.graph.config ?? {}) },
       variables: initial.graph.variables,
       functions: initial.graph.functions,
+      classes: initial.graph.classes,
     });
     return () => {
       reset();
@@ -91,6 +94,7 @@ export function Editor({ initial }: EditorProps) {
                 config: state.config,
                 variables: state.variables,
                 functions: state.functions,
+                classes: state.classes,
               },
             }),
           },

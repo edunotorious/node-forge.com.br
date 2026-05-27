@@ -13,6 +13,7 @@ import { create } from "zustand";
 import type { ProjectFileSummary } from "@/lib/server-api";
 import {
   DEFAULT_CONFIG,
+  type ClassDef,
   type ExecutionJob,
   type FunctionDef,
   type GraphConfig,
@@ -34,6 +35,7 @@ interface State {
   config: GraphConfig;
   variables: VariableDef[];
   functions: FunctionDef[];
+  classes: ClassDef[];
   selectedNodeId: string | null;
   saveStatus: SaveStatus;
   lastSavedAt: Date | null;
@@ -56,6 +58,7 @@ interface Actions {
     config: GraphConfig;
     variables: VariableDef[];
     functions: FunctionDef[];
+    classes: ClassDef[];
   }) => void;
   // Replace just the active-file graph + identity, keeping project info. Used
   // when switching tabs without re-hydrating from a server roundtrip.
@@ -67,6 +70,7 @@ interface Actions {
     config: GraphConfig;
     variables: VariableDef[];
     functions: FunctionDef[];
+    classes: ClassDef[];
   }) => void;
   setFiles: (files: ProjectFileSummary[]) => void;
   reset: () => void;
@@ -82,6 +86,9 @@ interface Actions {
   removeVariable: (id: string) => void;
   addFunction: (f: FunctionDef) => void;
   removeFunction: (id: string) => void;
+  addClass: (c: ClassDef) => void;
+  removeClass: (id: string) => void;
+  updateClass: (id: string, patch: Partial<ClassDef>) => void;
   markDirty: () => void;
   setSaveStatus: (status: SaveStatus, when?: Date | null) => void;
   setLeftTab: (tab: LeftTab) => void;
@@ -102,6 +109,7 @@ const INITIAL: State = {
   config: DEFAULT_CONFIG,
   variables: [],
   functions: [],
+  classes: [],
   selectedNodeId: null,
   saveStatus: "idle",
   lastSavedAt: null,
@@ -128,6 +136,7 @@ export const useEditor = create<State & Actions>((set) => ({
       config: data.config,
       variables: data.variables,
       functions: data.functions,
+      classes: data.classes,
       selectedNodeId: null,
       saveStatus: "idle",
       lastSavedAt: null,
@@ -141,6 +150,7 @@ export const useEditor = create<State & Actions>((set) => ({
       config: data.config,
       variables: data.variables,
       functions: data.functions,
+      classes: data.classes,
       selectedNodeId: null,
       saveStatus: "idle",
       lastSavedAt: null,
@@ -184,6 +194,20 @@ export const useEditor = create<State & Actions>((set) => ({
   removeFunction: (id) =>
     set((s) => ({
       functions: s.functions.filter((f) => f.id !== id),
+      saveStatus: "dirty",
+    })),
+  addClass: (c) =>
+    set((s) => ({ classes: [...s.classes, c], saveStatus: "dirty" })),
+  removeClass: (id) =>
+    set((s) => ({
+      classes: s.classes.filter((c) => c.id !== id),
+      saveStatus: "dirty",
+    })),
+  updateClass: (id, patch) =>
+    set((s) => ({
+      classes: s.classes.map((c) =>
+        c.id === id ? { ...c, ...patch } : c,
+      ),
       saveStatus: "dirty",
     })),
   markDirty: () => set({ saveStatus: "dirty" }),

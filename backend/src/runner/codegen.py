@@ -131,6 +131,72 @@ def _emit_variable(v: dict[str, Any]) -> list[str]:
     return [f"{name}: {py_type} = {raw_value}"]
 
 
+def _emit_method(f: dict[str, Any]) -> list[str]:
+    """Like _emit_function but the first parameter is implicitly `self`.
+    Body is indented two levels (we're inside the class block already)."""
+    name = (f.get("name") or "").strip()
+    if not name:
+        return []
+    return_type = f.get("return_type", "None")
+    py_return = _PY_TYPE.get(return_type, "None")
+
+    params = f.get("parameters") or []
+    params_parts = ["self"]
+    for p in params:
+        pname = (p.get("name") or "").strip()
+        if not pname:
+            continue
+        ptype = _PY_TYPE.get(p.get("type", "Int"), "object")
+        params_parts.append(f"{pname}: {ptype}")
+    params_str = ", ".join(params_parts)
+
+    body = f.get("body") or ""
+    body_lines = [ln for ln in body.splitlines() if ln.strip() != ""]
+    if not body_lines:
+        body_lines = ["pass"]
+    return [
+        f"def {name}({params_str}) -> {py_return}:",
+        *[f"    {line}" for line in body_lines],
+    ]
+
+
+def _emit_class(c: dict[str, Any]) -> list[str]:
+    """Emit a `class Name(Parent): ...` block with decorators above. Members
+    follow the Python convention order: class vars → methods. An empty
+    class with no members gets a `pass` so the def parses."""
+    name = (c.get("name") or "").strip()
+    if not name:
+        return []
+    parent = (c.get("parent_class") or "").strip()
+    header = f"class {name}({parent}):" if parent else f"class {name}:"
+
+    decorators = c.get("decorators") or []
+    variables = c.get("variables") or []
+    methods = c.get("methods") or []
+
+    lines: list[str] = []
+    for dec in decorators:
+        dec_clean = (dec or "").strip()
+        if dec_clean:
+            lines.append(f"@{dec_clean}")
+    lines.append(header)
+
+    body_lines: list[str] = []
+    for v in variables:
+        body_lines.extend(_emit_variable(v))
+    for m in methods:
+        if body_lines:
+            body_lines.append("")  # blank line between members
+        body_lines.extend(_emit_method(m))
+
+    if not body_lines:
+        body_lines = ["pass"]
+
+    lines.extend(f"    {ln}" for ln in body_lines)
+    lines.append("")
+    return lines
+
+
 def _emit_function(f: dict[str, Any]) -> list[str]:
     """Emit a `def name(params) -> return_type: body` block. Parameters are
     typed too. Empty body becomes `pass` so the def parses."""
@@ -202,6 +268,7 @@ def generate_python(graph: dict[str, Any]) -> str:
     config = graph.get("config") or {}
     variables = graph.get("variables") or []
     functions = graph.get("functions") or []
+    classes = graph.get("classes") or []
 
     num_qubits = max(1, int(config.get("num_qubits", 2)))
     num_classical = max(1, int(config.get("num_classical", 2)))
@@ -237,6 +304,11 @@ def generate_python(graph: dict[str, Any]) -> str:
         lines.append("# Functions")
         for f in functions:
             lines.extend(_emit_function(f))
+    if classes:
+        lines.append("")
+        lines.append("# Classes")
+        for c in classes:
+            lines.extend(_emit_class(c))
 
     lines.append("")
     lines.append(f"qc = QuantumCircuit({num_qubits}, {num_classical})")

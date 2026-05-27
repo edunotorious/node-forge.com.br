@@ -49,6 +49,7 @@ export interface ProjectFileFull extends ProjectFileSummary {
     config: { num_qubits: number; num_classical: number; shots: number };
     variables?: unknown[];
     functions?: unknown[];
+    classes?: unknown[];
   };
 }
 

@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   DEFAULT_CONFIG,
+  type ClassDef,
   type FunctionDef,
   type VariableDef,
 } from "@/lib/graph-types";
@@ -68,6 +69,9 @@ export function FileTabsBar({ flushSave, onRun }: Props) {
           : [],
         functions: Array.isArray(graph.functions)
           ? (graph.functions as FunctionDef[])
+          : [],
+        classes: Array.isArray(graph.classes)
+          ? (graph.classes as ClassDef[])
           : [],
       });
     } catch (err) {

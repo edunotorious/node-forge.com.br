@@ -93,12 +93,25 @@ export interface FunctionDef {
   body: string;
 }
 
+export interface ClassDef {
+  id: string;
+  name: string;
+  // Empty string treated as "no parent" — emitted as `class Name:` (no parens).
+  parent_class: string;
+  // Bare decorator names (e.g. ["dataclass", "frozen"]). Codegen prefixes
+  // each with `@` and emits them above the class line.
+  decorators: string[];
+  variables: VariableDef[];
+  methods: FunctionDef[];
+}
+
 export interface GraphPayload {
   nodes: Node[];
   edges: Edge[];
   config: GraphConfig;
   variables?: VariableDef[];
   functions?: FunctionDef[];
+  classes?: ClassDef[];
 }
 
 export const DEFAULT_CONFIG: GraphConfig = {

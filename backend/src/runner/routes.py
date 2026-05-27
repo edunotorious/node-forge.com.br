@@ -13,7 +13,7 @@ from src.config import get_settings
 from src.db.models import ExecutionJob, Project, ProjectFile, User
 from src.db.session import SessionLocal, get_session
 from src.runner.codegen import GraphCycleError, generate_python
-from src.runner.schemas import JobResponse
+from src.runner.schemas import JobResponse, TerminalRequest, TerminalResponse
 
 router = APIRouter(tags=["runner"])
 
@@ -142,3 +142,96 @@ async def get_job(
             status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
         )
     return job
+
+
+# ---------- terminal (REPL) ----------
+
+
+def _build_terminal_wrapper(history: list[str], command: str) -> str:
+    """Wrap the user's REPL command in a script that:
+      1. Replays `history` silently (rebuilds the namespace).
+      2. Runs `command`. If its LAST statement is an expression, prints
+         its repr so the user sees a result — matches the Python REPL.
+
+    The full source travels as Python string literals via `repr()`, so we
+    never have to think about quoting / escaping the user's input.
+    """
+    hist_src = "\n".join(history)
+    return f'''\
+import ast as _ast
+import contextlib as _contextlib
+import io as _io
+import traceback as _traceback
+
+_HIST_SRC = {hist_src!r}
+_CMD_SRC = {command!r}
+
+_ns = {{}}
+
+# Replay history silently. History was already shown to the user on the
+# turn that produced it; suppressing output here keeps the new command's
+# output clean. Errors are swallowed for the same reason — the user
+# already saw them, and we don't want to mask the new command's output
+# with an old traceback.
+_silent = _io.StringIO()
+with _contextlib.redirect_stdout(_silent), _contextlib.redirect_stderr(_silent):
+    try:
+        exec(_HIST_SRC, _ns)
+    except Exception:
+        pass
+
+# Run the new command. REPL semantics: a trailing expression prints its
+# repr; anything else just executes.
+try:
+    _parsed = _ast.parse(_CMD_SRC, mode="exec")
+    if _parsed.body and isinstance(_parsed.body[-1], _ast.Expr):
+        _prior = _parsed.body[:-1]
+        _last = _parsed.body[-1]
+        if _prior:
+            exec(
+                compile(_ast.Module(body=_prior, type_ignores=[]), "<cmd>", "exec"),
+                _ns,
+            )
+        _value = eval(
+            compile(_ast.Expression(body=_last.value), "<cmd>", "eval"),
+            _ns,
+        )
+        if _value is not None:
+            print(repr(_value))
+    else:
+        exec(_CMD_SRC, _ns)
+except Exception:
+    _traceback.print_exc()
+'''
+
+
+@router.post("/terminal", response_model=TerminalResponse)
+async def terminal(
+    data: TerminalRequest,
+    user: Annotated[User, Depends(get_current_user)],
+) -> TerminalResponse:
+    """Stateless REPL. The client owns the conversation history; we just
+    forward a wrapped script to the executor and return whatever the new
+    command printed. Each call spawns a fresh runner container."""
+    script = _build_terminal_wrapper(data.history, data.command)
+    timeout = _settings.executor_timeout_seconds + 10
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            res = await client.post(
+                f"{_settings.executor_url}/run",
+                json={"code": script},
+                headers={"X-Internal-API-Token": _settings.internal_api_token},
+            )
+        res.raise_for_status()
+        payload = res.json()
+        return TerminalResponse(
+            stdout=payload.get("stdout", ""),
+            stderr=payload.get("stderr", ""),
+            status=payload.get("status", "error"),
+        )
+    except httpx.HTTPError as exc:
+        return TerminalResponse(
+            stdout="",
+            stderr=f"Executor call failed: {exc}",
+            status="error",
+        )

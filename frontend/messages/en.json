@@ -164,7 +164,35 @@
       "terminal": "Terminal",
       "imports": "Imports"
     },
-    "classesPlaceholder": "Class definitions will live here (future phase).",
+    "classesPlaceholder": "No classes defined.",
+    "classes": {
+      "addClass": "Add class",
+      "addDecorator": "Add decorator",
+      "addVariable": "Add variable",
+      "addMethod": "Add method",
+      "decoratorsLabel": "Decorators",
+      "inheritsFrom": "Inherits from",
+      "variablesLabel": "Variables",
+      "methodsLabel": "Methods",
+      "removeAria": "Remove",
+      "expandAria": "Expand",
+      "collapseAria": "Collapse",
+      "newClassTitle": "New class",
+      "newClassName": "Name",
+      "newClassParent": "Inherits from (optional)",
+      "newClassParentPlaceholder": "e.g. BaseClass",
+      "newClassSubmit": "Create",
+      "newDecoratorTitle": "New decorator",
+      "newDecoratorName": "Name",
+      "newDecoratorPlaceholder": "e.g. dataclass",
+      "newDecoratorSubmit": "Add",
+      "errors": {
+        "nameRequired": "Enter a name",
+        "nameInvalid": "Invalid name (letters, digits and _)",
+        "duplicateName": "A class with that name already exists",
+        "duplicateDecorator": "That decorator is already applied"
+      }
+    },
     "details": {
       "paletteSection": "Palette",
       "variables": "Variables",
@@ -199,9 +227,12 @@
       "duplicateName": "A function with that name already exists"
     },
     "terminal": {
-      "banner": "Terminal will be wired to the executor in Phase 7. The input below is visual only for now.",
+      "banner": "Python REPL running in the sandbox. State persists across commands while the tab is open.",
       "prompt": ">",
-      "inputAria": "Terminal command"
+      "inputAria": "Terminal command",
+      "running": "running...",
+      "clear": "Clear terminal",
+      "clearAria": "Clear terminal history"
     },
     "imports": {
       "nodeImports": "Node Imports",

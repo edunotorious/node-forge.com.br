@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Editor } from "@/components/editor/Editor";
 import {
   DEFAULT_CONFIG,
+  type ClassDef,
   type FunctionDef,
   type VariableDef,
 } from "@/lib/graph-types";
@@ -50,6 +51,9 @@ export default async function ProjectPage({
             : [],
           functions: Array.isArray(graph.functions)
             ? (graph.functions as FunctionDef[])
+            : [],
+          classes: Array.isArray(graph.classes)
+            ? (graph.classes as ClassDef[])
             : [],
         },
       }}

@@ -164,7 +164,35 @@
       "terminal": "Terminal",
       "imports": "Imports"
     },
-    "classesPlaceholder": "Definições de classes virão aqui (Fase futura).",
+    "classesPlaceholder": "Nenhuma classe definida.",
+    "classes": {
+      "addClass": "Adicionar classe",
+      "addDecorator": "Adicionar decorator",
+      "addVariable": "Adicionar variável",
+      "addMethod": "Adicionar método",
+      "decoratorsLabel": "Decorators",
+      "inheritsFrom": "Herda de",
+      "variablesLabel": "Variáveis",
+      "methodsLabel": "Métodos",
+      "removeAria": "Remover",
+      "expandAria": "Expandir",
+      "collapseAria": "Recolher",
+      "newClassTitle": "Nova classe",
+      "newClassName": "Nome",
+      "newClassParent": "Herda de (opcional)",
+      "newClassParentPlaceholder": "ex: BaseClass",
+      "newClassSubmit": "Criar",
+      "newDecoratorTitle": "Novo decorator",
+      "newDecoratorName": "Nome",
+      "newDecoratorPlaceholder": "ex: dataclass",
+      "newDecoratorSubmit": "Adicionar",
+      "errors": {
+        "nameRequired": "Informe um nome",
+        "nameInvalid": "Nome inválido (use letras, dígitos e _)",
+        "duplicateName": "Já existe uma classe com esse nome",
+        "duplicateDecorator": "Esse decorator já está aplicado"
+      }
+    },
     "details": {
       "paletteSection": "Paleta",
       "variables": "Variables",
@@ -199,9 +227,12 @@
       "duplicateName": "Já existe uma função com esse nome"
     },
     "terminal": {
-      "banner": "O Terminal será conectado ao executor na Fase 7. O input abaixo é apenas visual por enquanto.",
+      "banner": "REPL Python rodando no sandbox. Estado persiste entre comandos enquanto a aba está aberta.",
       "prompt": ">",
-      "inputAria": "Comando do terminal"
+      "inputAria": "Comando do terminal",
+      "running": "executando...",
+      "clear": "Limpar terminal",
+      "clearAria": "Limpar histórico do terminal"
     },
     "imports": {
       "nodeImports": "Node Imports",

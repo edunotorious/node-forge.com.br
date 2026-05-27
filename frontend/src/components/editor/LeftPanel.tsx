@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
+import { ClassesSection } from "@/components/editor/ClassesSection";
 import { FunctionsSection } from "@/components/editor/FunctionsSection";
 import { NodePalette } from "@/components/editor/NodePalette";
 import { PropertiesPanel } from "@/components/editor/PropertiesPanel";
@@ -40,7 +41,7 @@ export function LeftPanel() {
 
       <div className="flex-1 overflow-y-auto">
         {tab === "details" && <DetailsTab />}
-        {tab === "classes" && <ClassesPlaceholder />}
+        {tab === "classes" && <ClassesPanel />}
         {tab === "inspect" && <PropertiesPanel embedded />}
       </div>
     </aside>
@@ -87,11 +88,10 @@ function DetailsTab() {
   );
 }
 
-function ClassesPlaceholder() {
-  const t = useTranslations("editor");
+function ClassesPanel() {
   return (
-    <div className="p-4 text-xs text-muted-foreground">
-      {t("classesPlaceholder")}
+    <div className="p-3">
+      <ClassesSection />
     </div>
   );
 }
