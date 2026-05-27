@@ -112,6 +112,11 @@
       "unsaved": "Mudanças não salvas",
       "idle": "—"
     },
+    "searchNode": {
+      "placeholder": "Buscar nodo",
+      "empty": "Nenhum nodo encontrado.",
+      "shortcutHint": "Clique direito no canvas pra abrir"
+    },
     "palette": {
       "title": "Paleta",
       "groups": {

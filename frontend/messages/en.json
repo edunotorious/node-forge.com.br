@@ -112,6 +112,11 @@
       "unsaved": "Unsaved changes",
       "idle": "—"
     },
+    "searchNode": {
+      "placeholder": "Search Node",
+      "empty": "No matching nodes.",
+      "shortcutHint": "Right-click on the canvas to open"
+    },
     "palette": {
       "title": "Palette",
       "groups": {
