@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, ImageIcon, Loader2, PencilLine, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -45,6 +45,7 @@ interface Project {
   id: string;
   name: string;
   description: string | null;
+  has_thumbnail: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -85,6 +86,25 @@ async function deleteProjectReq(id: string): Promise<void> {
   if (!res.ok) throw new Error("deleteProject failed");
 }
 
+async function duplicateProjectReq(id: string): Promise<Project> {
+  const res = await fetch(`/api/projects/${id}/duplicate`, { method: "POST" });
+  if (!res.ok) throw new Error("duplicateProject failed");
+  return res.json();
+}
+
+async function uploadThumbnailReq(id: string, file: File): Promise<void> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch(`/api/projects/${id}/thumbnail`, {
+    method: "PUT",
+    body: fd,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail ?? "uploadThumbnail failed");
+  }
+}
+
 // Built outside the component so React 19's `react-hooks/purity` rule does
 // not flag Math.random / new Date — they only run when the user submits, not
 // during render.
@@ -94,6 +114,7 @@ function buildOptimisticProject(values: NewValues): Project {
     id: "optimistic-" + Math.random().toString(36).slice(2),
     name: values.name,
     description: values.description ?? null,
+    has_thumbnail: false,
     created_at: now,
     updated_at: now,
   };
@@ -105,6 +126,11 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [renamingProject, setRenamingProject] = useState<Project | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+  // Single hidden file picker shared by every tile's "Change Project Image"
+  // context menu item. Re-pointed by stashing the target project id in a
+  // ref each time the menu fires.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileTargetRef = useRef<string | null>(null);
 
   const newSchema = z.object({
     name: z.string().min(1, t("newDialog.nameRequired")).max(255),
@@ -183,6 +209,46 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
     onSettled: () => qc.invalidateQueries({ queryKey: QK }),
   });
 
+  const duplicateMut = useMutation({
+    mutationFn: duplicateProjectReq,
+    onError: () => toast.error(t("toast.duplicateFailed")),
+    onSuccess: () => {
+      toast.success(t("toast.duplicated"));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: QK }),
+  });
+
+  const uploadThumbnailMut = useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) =>
+      uploadThumbnailReq(id, file),
+    onError: () => toast.error(t("toast.imageUploadFailed")),
+    onSuccess: () => {
+      toast.success(t("toast.imageUploaded"));
+    },
+    // The list payload only carries has_thumbnail; the `<img>` URL is the
+    // same so we just need React to rerender. Invalidating bumps the
+    // cache-busting search param via setBumpKey too.
+    onSettled: () => qc.invalidateQueries({ queryKey: QK }),
+  });
+
+  const [thumbnailBumpKey, setThumbnailBumpKey] = useState(0);
+
+  function onPickThumbnail(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    const targetId = fileTargetRef.current;
+    fileTargetRef.current = null;
+    if (!file || !targetId) return;
+    if (file.type !== "image/png") {
+      toast.error(t("toast.invalidPng"));
+      return;
+    }
+    uploadThumbnailMut.mutate(
+      { id: targetId, file },
+      { onSuccess: () => setThumbnailBumpKey((k) => k + 1) },
+    );
+  }
+
   const newForm = useForm<NewValues>({
     resolver: zodResolver(newSchema),
     defaultValues: { name: "", description: "" },
@@ -259,12 +325,16 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
           <ProjectTile
             key={p.id}
             project={p}
+            thumbnailBumpKey={thumbnailBumpKey}
             onRename={() => {
               renameForm.reset({ name: p.name });
               setRenamingProject(p);
             }}
-            onChangeImage={() => toast.info(t("contextMenu.comingSoon"))}
-            onDuplicate={() => toast.info(t("contextMenu.comingSoon"))}
+            onChangeImage={() => {
+              fileTargetRef.current = p.id;
+              fileInputRef.current?.click();
+            }}
+            onDuplicate={() => duplicateMut.mutate(p.id)}
             onDelete={() => setConfirmingId(p.id)}
           />
         ))}
@@ -275,6 +345,16 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
           {t("empty.message")}
         </p>
       )}
+
+      {/* Single hidden file input shared by every tile's Change Image
+          context-menu item — see fileTargetRef. PNG only. */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png"
+        className="hidden"
+        onChange={onPickThumbnail}
+      />
 
       {/* Rename dialog */}
       <Dialog
@@ -358,6 +438,9 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
 
 interface ProjectTileProps {
   project: Project;
+  // Bumped on every successful thumbnail upload so the `<img>` reloads
+  // instead of serving the prior cached bytes.
+  thumbnailBumpKey: number;
   onRename: () => void;
   onChangeImage: () => void;
   onDuplicate: () => void;
@@ -366,6 +449,7 @@ interface ProjectTileProps {
 
 function ProjectTile({
   project,
+  thumbnailBumpKey,
   onRename,
   onChangeImage,
   onDuplicate,
@@ -380,10 +464,19 @@ function ProjectTile({
             href={`/projects/${project.id}`}
             aria-label={t("card.openAria", { name: project.name })}
             className={cn(
-              "block aspect-[5/4] rounded-2xl bg-muted transition-all",
+              "block aspect-[5/4] overflow-hidden rounded-2xl bg-muted transition-all",
               "hover:scale-[1.02] hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
             )}
-          />
+          >
+            {project.has_thumbnail && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`/api/projects/${project.id}/thumbnail?v=${thumbnailBumpKey}`}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            )}
+          </Link>
           <p className="truncate text-center font-heading text-lg font-bold">
             {project.name || t("card.untitled")}
           </p>

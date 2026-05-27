@@ -86,6 +86,10 @@ class Project(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Project tile image — inline PNG bytes (same shape as the user avatar
+    # on the `users` row). Capped at 1 MB by the upload endpoint.
+    thumbnail_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    thumbnail_mime: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -110,6 +114,13 @@ class Project(Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def has_thumbnail(self) -> bool:
+        """Exposed on ProjectSummary so the client can decide whether to
+        render the thumbnail URL without paying for the bytes on every
+        list call."""
+        return self.thumbnail_data is not None
 
 
 class ProjectFile(Base):

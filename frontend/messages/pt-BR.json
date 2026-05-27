@@ -90,7 +90,12 @@
       "deleted": "Projeto deletado",
       "listFailed": "Falha ao carregar projetos",
       "renameFailed": "Falha ao renomear projeto",
-      "renamed": "Projeto renomeado"
+      "renamed": "Projeto renomeado",
+      "duplicateFailed": "Falha ao duplicar projeto",
+      "duplicated": "Projeto duplicado",
+      "imageUploadFailed": "Falha ao enviar imagem",
+      "imageUploaded": "Imagem atualizada",
+      "invalidPng": "Selecione um PNG válido"
     }
   },
   "editor": {

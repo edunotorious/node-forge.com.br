@@ -90,7 +90,12 @@
       "deleted": "Project deleted",
       "listFailed": "Failed to load projects",
       "renameFailed": "Failed to rename project",
-      "renamed": "Project renamed"
+      "renamed": "Project renamed",
+      "duplicateFailed": "Failed to duplicate project",
+      "duplicated": "Project duplicated",
+      "imageUploadFailed": "Failed to upload image",
+      "imageUploaded": "Image updated",
+      "invalidPng": "Pick a valid PNG"
     }
   },
   "editor": {

@@ -29,6 +29,7 @@ export interface Project {
   id: string;
   name: string;
   description: string | null;
+  has_thumbnail: boolean;
   created_at: string;
   updated_at: string;
 }

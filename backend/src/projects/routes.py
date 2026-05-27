@@ -1,7 +1,15 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +27,11 @@ from src.projects.schemas import (
     ProjectSummary,
     ProjectUpdate,
 )
+
+# Project thumbnail caps — same 1 MB / PNG-only contract as user avatars
+# (see src/users/routes.py).
+MAX_THUMBNAIL_BYTES = 1_048_576
+ALLOWED_THUMBNAIL_MIMES = {"image/png"}
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -231,3 +244,132 @@ async def delete_file(
         raise _file_not_found()
     await session.delete(pf)
     await session.commit()
+
+
+# ---------- duplicate ----------
+
+
+@router.post(
+    "/{project_id}/duplicate",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ProjectResponse,
+)
+async def duplicate_project(
+    project_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Project:
+    """Clone a project plus every file. Thumbnail bytes are copied too so
+    the duplicate looks the same on the projects grid; ownership stays
+    with the calling user. New UUIDs everywhere — the duplicate is a
+    fully independent project."""
+    source = await _get_owned(session, project_id, user.id)
+
+    dup_name = f"{source.name} (copy)"
+    # Avoid trampling an existing "(copy)" duplicate — append a counter
+    # until the name is unused by this user. Bounded to keep this from
+    # spinning on a pathological case.
+    used_stmt = select(Project.name).where(Project.user_id == user.id)
+    used = {row[0] for row in (await session.execute(used_stmt)).all()}
+    if dup_name in used:
+        for i in range(2, 1000):
+            candidate = f"{source.name} (copy {i})"
+            if candidate not in used:
+                dup_name = candidate
+                break
+
+    clone = Project(
+        user_id=user.id,
+        name=dup_name,
+        description=source.description,
+        thumbnail_data=source.thumbnail_data,
+        thumbnail_mime=source.thumbnail_mime,
+    )
+    # Files: same name + position + graph for each one. Schema-side
+    # unique(project_id, name) is fine because the new project is empty.
+    for f in source.files:
+        clone.files.append(
+            ProjectFile(
+                name=f.name,
+                position=f.position,
+                graph_json=dict(f.graph_json or {}),
+            )
+        )
+    session.add(clone)
+    await session.commit()
+    await session.refresh(clone, attribute_names=["files"])
+    return clone
+
+
+# ---------- thumbnail ----------
+
+
+@router.put(
+    "/{project_id}/thumbnail",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def upload_thumbnail(
+    project_id: uuid.UUID,
+    file: Annotated[UploadFile, File()],
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    project = await _get_owned(session, project_id, user.id)
+
+    if file.content_type not in ALLOWED_THUMBNAIL_MIMES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Thumbnail must be a PNG",
+        )
+    body = await file.read(MAX_THUMBNAIL_BYTES + 1)
+    if len(body) > MAX_THUMBNAIL_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Thumbnail must be at most {MAX_THUMBNAIL_BYTES} bytes",
+        )
+    # Magic-byte check (matches the avatar endpoint) — a renamed JPEG
+    # can sneak past content-type sniffing but not this.
+    if not body.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File is not a valid PNG",
+        )
+    project.thumbnail_data = body
+    project.thumbnail_mime = file.content_type
+    await session.commit()
+
+
+@router.delete(
+    "/{project_id}/thumbnail",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_thumbnail(
+    project_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    project = await _get_owned(session, project_id, user.id)
+    project.thumbnail_data = None
+    project.thumbnail_mime = None
+    await session.commit()
+
+
+@router.get("/{project_id}/thumbnail")
+async def get_thumbnail(
+    project_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    project = await _get_owned(session, project_id, user.id)
+    if project.thumbnail_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No thumbnail set",
+        )
+    return Response(
+        content=project.thumbnail_data,
+        media_type=project.thumbnail_mime or "image/png",
+        # Cache-Control:no-store so the project grid picks up new uploads
+        # immediately. List responses already invalidate via the query key.
+        headers={"Cache-Control": "no-store"},
+    )

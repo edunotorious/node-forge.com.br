@@ -36,6 +36,9 @@ class ProjectSummary(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None
+    # Derived from the ORM's `has_thumbnail` property — the bytes never ride
+    # along on /projects so listing scales.
+    has_thumbnail: bool = False
     created_at: datetime
     updated_at: datetime
 
