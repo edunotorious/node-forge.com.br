@@ -46,3 +46,9 @@ Thumbs.db
 # Logs / build
 *.log
 .docker/
+
+# Playwright E2E
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+frontend/playwright/.cache/
