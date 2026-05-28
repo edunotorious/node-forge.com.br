@@ -49,7 +49,7 @@ _LOGO_DATA_URL = (
 # Public HTTPS URL of the official Node-Forge wordmark PNG. This is what
 # gets referenced from the password-reset email — Gmail's image proxy
 # fetches and caches it, so the logo renders in every client.
-_LOGO_URL = "https://i.ibb.co/8DjnpsqW/Logo.png"
+_LOGO_URL = "https://i.ibb.co/nMfW0pfq/Vector.png"
 
 
 @dataclass(frozen=True)
