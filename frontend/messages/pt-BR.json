@@ -147,6 +147,10 @@
       "empty": "Nenhum nodo encontrado.",
       "shortcutHint": "Clique direito no canvas pra abrir"
     },
+    "nodeMenu": {
+      "delete": "Excluir nodo",
+      "deleteHint": "Delete / Backspace"
+    },
     "palette": {
       "title": "Paleta",
       "groups": {

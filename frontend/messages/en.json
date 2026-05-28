@@ -147,6 +147,10 @@
       "empty": "No matching nodes.",
       "shortcutHint": "Right-click on the canvas to open"
     },
+    "nodeMenu": {
+      "delete": "Delete node",
+      "deleteHint": "Delete / Backspace"
+    },
     "palette": {
       "title": "Palette",
       "groups": {

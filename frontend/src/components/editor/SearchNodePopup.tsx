@@ -73,7 +73,7 @@ export function SearchNodePopup({ screenX, screenY, onPick, onClose }: Props) {
         if (pick) onPick(pick.type);
       }
     }
-    function onDown(e: MouseEvent) {
+    function onDown(e: PointerEvent) {
       if (
         containerRef.current &&
         !containerRef.current.contains(e.target as Node)
@@ -82,10 +82,13 @@ export function SearchNodePopup({ screenX, screenY, onPick, onClose }: Props) {
       }
     }
     document.addEventListener("keydown", onKey);
-    document.addEventListener("mousedown", onDown);
+    // Capture phase + pointerdown so we beat React Flow's pane listeners —
+    // a bubble-phase mousedown was being swallowed somewhere in the React
+    // Flow tree, so the outside-click close never fired.
+    document.addEventListener("pointerdown", onDown, true);
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("pointerdown", onDown, true);
     };
   }, [onClose, onPick, flatResults, safeIndex]);
 
