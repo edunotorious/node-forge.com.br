@@ -2,7 +2,7 @@
 
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 
 import { ConsoleView } from "@/components/editor/ConsoleView";
 import { ImportsView } from "@/components/editor/ImportsView";
@@ -11,17 +11,39 @@ import { cn } from "@/lib/utils";
 import { useEditor } from "@/stores/editor";
 
 const HEIGHT_STORAGE_KEY = "nodeforge.editor.bottomPanelHeight";
+// Same-tab writes to localStorage don't fire the native `storage` event, so
+// we dispatch this one alongside any persist call. Other tabs still get
+// the native `storage` event for free.
+const HEIGHT_CHANGE_EVENT = "nodeforge:bottompanel-height";
 const DEFAULT_HEIGHT = 288;
 const MIN_HEIGHT = 120;
 const MAX_HEIGHT_VH = 0.7; // 70% of viewport — leave room for the canvas
 
 function readStoredHeight(): number {
-  if (typeof window === "undefined") return DEFAULT_HEIGHT;
   const raw = window.localStorage.getItem(HEIGHT_STORAGE_KEY);
   if (!raw) return DEFAULT_HEIGHT;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return DEFAULT_HEIGHT;
   return Math.max(MIN_HEIGHT, parsed);
+}
+
+function subscribeToStoredHeight(callback: () => void) {
+  window.addEventListener("storage", callback);
+  window.addEventListener(HEIGHT_CHANGE_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(HEIGHT_CHANGE_EVENT, callback);
+  };
+}
+
+function persistHeight(value: number) {
+  try {
+    window.localStorage.setItem(HEIGHT_STORAGE_KEY, String(Math.round(value)));
+    window.dispatchEvent(new Event(HEIGHT_CHANGE_EVENT));
+  } catch {
+    // localStorage can throw in private mode / sandboxed iframes — we
+    // don't care; the height just resets next reload.
+  }
 }
 
 // Bottom dock with three tabs: Console / Terminal / Imports. The top edge
@@ -33,22 +55,33 @@ export function BottomPanel() {
   const setTab = useEditor((s) => s.setBottomTab);
   const collapsed = useEditor((s) => s.bottomPanelCollapsed);
   const toggle = useEditor((s) => s.toggleBottomPanel);
-  const [height, setHeight] = useState<number>(readStoredHeight);
+  // useSyncExternalStore is the React 19-blessed way to read from an
+  // external source like localStorage without producing an SSR/CSR
+  // hydration mismatch: the third arg is the SSR snapshot (server-safe
+  // default), while the second is the client snapshot read on each
+  // render. The subscribe channel picks up both other-tab writes
+  // (`storage`) and same-tab writes (our custom event from
+  // `persistHeight`).
+  const persistedHeight = useSyncExternalStore(
+    subscribeToStoredHeight,
+    readStoredHeight,
+    () => DEFAULT_HEIGHT,
+  );
+  // During a drag we override persistedHeight without committing to
+  // localStorage on every mousemove — the commit lands on mouseup.
+  const [dragHeight, setDragHeight] = useState<number | null>(null);
+  const height = dragHeight ?? persistedHeight;
   const [resizing, setResizing] = useState(false);
-  // Snapshot height at drag start — the document-level mousemove handler
-  // reads this directly so it doesn't need to depend on the React render
-  // cadence to see fresh values.
-  const heightAtDragStart = useRef(DEFAULT_HEIGHT);
+  // Tracks the LATEST in-drag height for the mouseup handler — setState is
+  // async/batched, so a closure over `height` wouldn't see the final value.
+  const latestDragHeight = useRef(DEFAULT_HEIGHT);
 
   function startResize(e: React.MouseEvent) {
     if (collapsed) return;
     e.preventDefault();
     const startY = e.clientY;
     const startH = height;
-    // Mirror the latest height into the ref on every move so onUp can
-    // persist it — setHeight is async and React-batched, so the closure
-    // around `height` wouldn't see the final value.
-    heightAtDragStart.current = startH;
+    latestDragHeight.current = startH;
     setResizing(true);
 
     function onMove(ev: MouseEvent) {
@@ -58,22 +91,19 @@ export function BottomPanel() {
         MIN_HEIGHT,
         Math.min(maxH, startH + (startY - ev.clientY)),
       );
-      heightAtDragStart.current = next;
-      setHeight(next);
+      latestDragHeight.current = next;
+      setDragHeight(next);
     }
     function onUp() {
       setResizing(false);
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
-      try {
-        window.localStorage.setItem(
-          HEIGHT_STORAGE_KEY,
-          String(Math.round(heightAtDragStart.current)),
-        );
-      } catch {
-        // localStorage can throw in private mode / sandboxed iframes —
-        // we don't care; the height just resets next reload.
-      }
+      // Commit the final drag value to localStorage. The persist call
+      // dispatches HEIGHT_CHANGE_EVENT which re-runs the external-store
+      // snapshot, so persistedHeight updates and dragHeight can drop back
+      // to null without flicker.
+      persistHeight(latestDragHeight.current);
+      setDragHeight(null);
     }
 
     document.addEventListener("mousemove", onMove);
