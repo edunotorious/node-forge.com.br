@@ -10,11 +10,37 @@ from src.users.schemas import ProfileResponse, ProfileUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-# Avatar caps. 1 MB matches the user-stream feedback rule and gives users
-# room for a reasonable PNG. PNG-only for v1 — the Figma's profile copy
-# explicitly says "PNG of size up to X", so JPEG/WEBP can wait.
-MAX_AVATAR_BYTES = 1_048_576
-ALLOWED_AVATAR_MIMES = {"image/png"}
+# Avatar caps. 2 MB gives room for higher-resolution JPEGs without becoming
+# a vector for abuse; the user-stream feedback rule's 1 MB ceiling applied
+# when we were PNG-only.
+MAX_AVATAR_BYTES = 2 * 1_048_576
+
+# Accepted formats. Content-Type alone is trivially spoofable so we also
+# inspect the magic bytes — `_detect_image_mime` returns the canonical mime
+# (or None) and is the source of truth for what gets stored.
+ALLOWED_AVATAR_MIMES = {
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
+}
+
+
+def _detect_image_mime(body: bytes) -> str | None:
+    """Sniff one of the formats we accept from the leading bytes. The
+    returned mime is what gets persisted alongside the bytes; we trust it
+    over the multipart's Content-Type so a renamed file can't impersonate
+    a format the client didn't actually send."""
+    if body.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if body.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if body.startswith(b"GIF87a") or body.startswith(b"GIF89a"):
+        return "image/gif"
+    # WebP is RIFF...WEBP at offsets 0 and 8 respectively.
+    if len(body) >= 12 and body[:4] == b"RIFF" and body[8:12] == b"WEBP":
+        return "image/webp"
+    return None
 
 
 @router.get("/me/profile", response_model=ProfileResponse)
@@ -51,10 +77,13 @@ async def upload_avatar(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
+    # Quick reject by Content-Type so we don't even materialise the body
+    # for obvious mismatches (PDFs, SVGs, executables…). The magic-byte
+    # check below is the authoritative gate.
     if file.content_type not in ALLOWED_AVATAR_MIMES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Avatar must be a PNG",
+            detail="Avatar must be PNG, JPEG, WebP, or GIF",
         )
     # Read with the cap in mind — pull one byte past the cap to detect
     # over-size uploads without ever materialising the full payload.
@@ -64,15 +93,17 @@ async def upload_avatar(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"Avatar must be at most {MAX_AVATAR_BYTES} bytes",
         )
-    # Trust the magic bytes a bit too — PNGs always start with this 8-byte
-    # signature. Stops trivially-renamed JPEGs/SVGs from sneaking through.
-    if not body.startswith(b"\x89PNG\r\n\x1a\n"):
+    sniffed = _detect_image_mime(body)
+    if sniffed is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File is not a valid PNG",
+            detail="File is not a valid PNG, JPEG, WebP, or GIF",
         )
+    # Trust the magic-byte sniff over the multipart Content-Type — a
+    # renamed JPEG advertised as PNG gets stored as the canonical JPEG
+    # mime so the GET endpoint serves the right thing.
     user.avatar_data = body
-    user.avatar_mime = file.content_type
+    user.avatar_mime = sniffed
     await session.commit()
 
 

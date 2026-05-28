@@ -95,7 +95,16 @@ export function ProfilePage({ user }: ProfilePageProps) {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-picking the same file
     if (!file) return;
-    if (file.type !== "image/png") {
+    // Accept the same set the backend accepts. The server validates
+    // magic bytes regardless, so a wrong type advertised here is caught
+    // there — this just gives faster feedback for obviously-wrong files.
+    const ok = new Set([
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "image/gif",
+    ]);
+    if (!ok.has(file.type)) {
       toast.error(t("avatar.uploadFailed"));
       return;
     }
@@ -135,7 +144,7 @@ export function ProfilePage({ user }: ProfilePageProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/png"
+          accept="image/png,image/jpeg,image/webp,image/gif"
           className="hidden"
           onChange={onAvatarPick}
         />
@@ -217,7 +226,7 @@ interface LockedFieldProps {
 function LockedField({ label, value, buttonLabel, onClick }: LockedFieldProps) {
   return (
     <div className="space-y-1.5">
-      <Label className="font-heading text-sm font-bold">{label}</Label>
+      <Label className="font-heading text-base font-extrabold tracking-tight text-foreground">{label}</Label>
       <div className="relative">
         <Input
           value={value}
@@ -325,7 +334,7 @@ function VaultProfileForm({
           onBlur={(v) => commit("bio", v)}
         />
         <div className="space-y-2">
-          <Label className="font-heading text-sm font-bold">
+          <Label className="font-heading text-base font-extrabold tracking-tight text-foreground">
             {t("socialAccounts")}
           </Label>
           {Array.from({ length: SOCIAL_SLOTS }).map((_, idx) => (
@@ -346,7 +355,7 @@ function VaultProfileForm({
       />
 
       <div className="space-y-2">
-        <Label className="font-heading text-sm font-bold">{t("email")}</Label>
+        <Label className="font-heading text-base font-extrabold tracking-tight text-foreground">{t("email")}</Label>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -372,7 +381,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="font-heading text-sm font-bold">{label}</Label>
+      <Label className="font-heading text-base font-extrabold tracking-tight text-foreground">{label}</Label>
       <Input
         defaultValue={defaultValue}
         onBlur={(e) => onBlur(e.target.value)}
@@ -393,7 +402,7 @@ function FieldTextarea({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="font-heading text-sm font-bold">{label}</Label>
+      <Label className="font-heading text-base font-extrabold tracking-tight text-foreground">{label}</Label>
       <textarea
         defaultValue={defaultValue}
         onBlur={(e) => onBlur(e.target.value)}
