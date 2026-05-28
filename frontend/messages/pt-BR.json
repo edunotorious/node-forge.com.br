@@ -75,7 +75,7 @@
     }
   },
   "projects": {
-    "title": "Projects",
+    "title": "Projetos",
     "createTileAria": "Criar novo projeto",
     "newDialog": {
       "title": "Novo projeto",

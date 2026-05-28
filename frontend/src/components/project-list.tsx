@@ -2,7 +2,16 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, ImageIcon, Loader2, PencilLine, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowUpRight,
+  CircuitBoard,
+  Copy,
+  ImageIcon,
+  Loader2,
+  PencilLine,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -267,7 +276,10 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
         {t("title")}
       </h1>
 
-      <div className="mt-10 grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
+      {/* Grid scales aggressively on wide monitors so single tiles don't
+          balloon to half the viewport on 1920+ screens. The base 2-col
+          layout stays for narrow widths. */}
+      <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
         {/* "+" create tile — always first */}
         <Dialog
           open={newOpen}
@@ -280,9 +292,9 @@ export function ProjectList({ initialData }: { initialData: Project[] }) {
             <button
               type="button"
               aria-label={t("createTileAria")}
-              className="group flex aspect-[5/4] items-center justify-center rounded-2xl bg-primary text-primary-foreground transition-all hover:scale-[1.02] hover:shadow-lg"
+              className="group flex aspect-[5/4] items-center justify-center rounded-xl bg-primary text-primary-foreground transition-all hover:scale-[1.02] hover:shadow-lg"
             >
-              <Plus className="h-12 w-12 stroke-[2.5]" />
+              <Plus className="h-8 w-8 stroke-[2.5]" />
             </button>
           </DialogTrigger>
           <DialogContent>
@@ -464,20 +476,32 @@ function ProjectTile({
             href={`/projects/${project.id}`}
             aria-label={t("card.openAria", { name: project.name })}
             className={cn(
-              "block aspect-[5/4] overflow-hidden rounded-2xl bg-muted transition-all",
+              "group/card relative block aspect-[5/4] overflow-hidden rounded-xl bg-gradient-to-br from-muted to-muted/70 transition-all",
               "hover:scale-[1.02] hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
             )}
           >
-            {project.has_thumbnail && (
+            {project.has_thumbnail ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={`/api/projects/${project.id}/thumbnail?v=${thumbnailBumpKey}`}
                 alt=""
                 className="h-full w-full object-cover"
               />
+            ) : (
+              // No thumbnail: show a stylized circuit icon at rest so the
+              // card has visual identity (not just a flat gray box).
+              <div className="absolute inset-0 grid place-items-center text-foreground/30 transition-opacity group-hover/card:opacity-60">
+                <CircuitBoard className="size-12" strokeWidth={1.3} />
+              </div>
             )}
+            {/* Hover-only "open" affordance — orange chip in the corner so
+                the user knows the card is clickable and what it does.
+                Works for both thumbnail and placeholder states. */}
+            <div className="absolute right-2 top-2 grid size-7 place-items-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-md transition-opacity group-hover/card:opacity-100">
+              <ArrowUpRight className="size-4" strokeWidth={2.5} />
+            </div>
           </Link>
-          <p className="truncate text-center font-heading text-lg font-bold">
+          <p className="truncate text-center font-heading text-sm font-bold">
             {project.name || t("card.untitled")}
           </p>
         </div>
