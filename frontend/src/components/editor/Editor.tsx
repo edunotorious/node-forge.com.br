@@ -186,6 +186,39 @@ export function Editor({ initial }: EditorProps) {
     };
   }, [saveStatus, save]);
 
+  // Cmd/Ctrl+Z = undo, Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y = redo.
+  //
+  // We skip the handler when focus is on an INPUT/TEXTAREA/contenteditable
+  // so the browser's native text-undo (which the user expects when they're
+  // typing in the project name input or a Variable value) keeps working.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        useEditor.getState().undo();
+      } else if ((key === "z" && e.shiftKey) || key === "y") {
+        e.preventDefault();
+        useEditor.getState().redo();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
     <ReactFlowProvider>
       <div className="flex h-[calc(100vh-3rem)] flex-col">

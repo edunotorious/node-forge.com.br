@@ -24,6 +24,23 @@ export type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
 export type LeftTab = "details" | "classes" | "inspect";
 export type BottomTab = "console" | "terminal" | "imports";
 
+// Subset of state that participates in undo/redo. Project / file identity,
+// UI toggles (tabs, collapse), and run results are deliberately OUT — we
+// only undo user EDITS to the file's content.
+interface Snapshot {
+  projectName: string;
+  nodes: Node[];
+  edges: Edge[];
+  config: GraphConfig;
+  variables: VariableDef[];
+  functions: FunctionDef[];
+  classes: ClassDef[];
+}
+
+// Bound the history to keep large editing sessions from chewing through
+// memory. 50 steps is more than enough for typical user undo expectations.
+const MAX_HISTORY = 50;
+
 interface State {
   projectId: string | null;
   projectName: string;
@@ -44,6 +61,10 @@ interface State {
   bottomPanelCollapsed: boolean;
   lastJob: ExecutionJob | null;
   isRunning: boolean;
+  // Undo / redo stacks. past[past.length - 1] is the most recent snapshot
+  // to roll back to; future[0] is the next thing to redo.
+  past: Snapshot[];
+  future: Snapshot[];
 }
 
 interface Actions {
@@ -98,6 +119,10 @@ interface Actions {
   toggleBottomPanel: () => void;
   setLastJob: (job: ExecutionJob | null) => void;
   setIsRunning: (running: boolean) => void;
+  // History controls. canUndo / canRedo are derived selectors so the
+  // EditorTopBar can disable its buttons accordingly.
+  undo: () => void;
+  redo: () => void;
 }
 
 const INITIAL: State = {
@@ -120,10 +145,36 @@ const INITIAL: State = {
   bottomPanelCollapsed: false,
   lastJob: null,
   isRunning: false,
+  past: [],
+  future: [],
 };
 
+function captureSnapshot(s: State): Snapshot {
+  return {
+    projectName: s.projectName,
+    nodes: s.nodes,
+    edges: s.edges,
+    config: s.config,
+    variables: s.variables,
+    functions: s.functions,
+    classes: s.classes,
+  };
+}
+
+// Patch returned by every mutating action to snapshot the current state
+// onto `past` and invalidate `future`. The cap-via-slice keeps the
+// history bounded.
+function _pushHistory(s: State): Pick<State, "past" | "future"> {
+  return {
+    past: [...s.past, captureSnapshot(s)].slice(-MAX_HISTORY),
+    future: [],
+  };
+}
+
 // User-driven changes flip status to "dirty" so the auto-save effect can tell
-// real edits apart from the initial hydrate. Hydrate resets to "idle".
+// real edits apart from the initial hydrate. Hydrate resets to "idle" AND
+// clears history — undoing back into a different file's state would be a
+// confusing footgun.
 export const useEditor = create<State & Actions>((set) => ({
   ...INITIAL,
   hydrate: (data) =>
@@ -142,6 +193,8 @@ export const useEditor = create<State & Actions>((set) => ({
       selectedNodeId: null,
       saveStatus: "idle",
       lastSavedAt: null,
+      past: [],
+      future: [],
     }),
   loadFile: (data) =>
     set({
@@ -156,25 +209,44 @@ export const useEditor = create<State & Actions>((set) => ({
       selectedNodeId: null,
       saveStatus: "idle",
       lastSavedAt: null,
+      past: [],
+      future: [],
     }),
   setFiles: (files) => set({ files }),
   reset: () => set(INITIAL),
   onNodesChange: (changes) =>
-    set((s) => ({
-      nodes: applyNodeChanges(changes, s.nodes),
-      saveStatus: hasMeaningfulChange(changes) ? "dirty" : s.saveStatus,
-    })),
+    set((s) => {
+      const meaningful = hasMeaningfulChange(changes);
+      return {
+        ...(meaningful ? _pushHistory(s) : {}),
+        nodes: applyNodeChanges(changes, s.nodes),
+        saveStatus: meaningful ? "dirty" : s.saveStatus,
+      };
+    }),
   onEdgesChange: (changes) =>
-    set((s) => ({
-      edges: applyEdgeChanges(changes, s.edges),
-      saveStatus: hasMeaningfulChange(changes) ? "dirty" : s.saveStatus,
-    })),
+    set((s) => {
+      const meaningful = hasMeaningfulChange(changes);
+      return {
+        ...(meaningful ? _pushHistory(s) : {}),
+        edges: applyEdgeChanges(changes, s.edges),
+        saveStatus: meaningful ? "dirty" : s.saveStatus,
+      };
+    }),
   onConnect: (conn) =>
-    set((s) => ({ edges: addEdge(conn, s.edges), saveStatus: "dirty" })),
+    set((s) => ({
+      ..._pushHistory(s),
+      edges: addEdge(conn, s.edges),
+      saveStatus: "dirty",
+    })),
   addNode: (node) =>
-    set((s) => ({ nodes: [...s.nodes, node], saveStatus: "dirty" })),
+    set((s) => ({
+      ..._pushHistory(s),
+      nodes: [...s.nodes, node],
+      saveStatus: "dirty",
+    })),
   updateNodeData: (id, patch) =>
     set((s) => ({
+      ..._pushHistory(s),
       nodes: s.nodes.map((n) =>
         n.id === id ? { ...n, data: { ...n.data, ...patch } } : n,
       ),
@@ -182,12 +254,26 @@ export const useEditor = create<State & Actions>((set) => ({
     })),
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setConfig: (patch) =>
-    set((s) => ({ config: { ...s.config, ...patch }, saveStatus: "dirty" })),
-  setProjectName: (name) => set({ projectName: name, saveStatus: "dirty" }),
+    set((s) => ({
+      ..._pushHistory(s),
+      config: { ...s.config, ...patch },
+      saveStatus: "dirty",
+    })),
+  setProjectName: (name) =>
+    set((s) => ({
+      ..._pushHistory(s),
+      projectName: name,
+      saveStatus: "dirty",
+    })),
   addVariable: (v) =>
-    set((s) => ({ variables: [...s.variables, v], saveStatus: "dirty" })),
+    set((s) => ({
+      ..._pushHistory(s),
+      variables: [...s.variables, v],
+      saveStatus: "dirty",
+    })),
   updateVariable: (id, patch) =>
     set((s) => ({
+      ..._pushHistory(s),
       variables: s.variables.map((v) =>
         v.id === id ? { ...v, ...patch } : v,
       ),
@@ -195,13 +281,19 @@ export const useEditor = create<State & Actions>((set) => ({
     })),
   removeVariable: (id) =>
     set((s) => ({
+      ..._pushHistory(s),
       variables: s.variables.filter((v) => v.id !== id),
       saveStatus: "dirty",
     })),
   addFunction: (f) =>
-    set((s) => ({ functions: [...s.functions, f], saveStatus: "dirty" })),
+    set((s) => ({
+      ..._pushHistory(s),
+      functions: [...s.functions, f],
+      saveStatus: "dirty",
+    })),
   updateFunction: (id, patch) =>
     set((s) => ({
+      ..._pushHistory(s),
       functions: s.functions.map((f) =>
         f.id === id ? { ...f, ...patch } : f,
       ),
@@ -209,18 +301,25 @@ export const useEditor = create<State & Actions>((set) => ({
     })),
   removeFunction: (id) =>
     set((s) => ({
+      ..._pushHistory(s),
       functions: s.functions.filter((f) => f.id !== id),
       saveStatus: "dirty",
     })),
   addClass: (c) =>
-    set((s) => ({ classes: [...s.classes, c], saveStatus: "dirty" })),
+    set((s) => ({
+      ..._pushHistory(s),
+      classes: [...s.classes, c],
+      saveStatus: "dirty",
+    })),
   removeClass: (id) =>
     set((s) => ({
+      ..._pushHistory(s),
       classes: s.classes.filter((c) => c.id !== id),
       saveStatus: "dirty",
     })),
   updateClass: (id, patch) =>
     set((s) => ({
+      ..._pushHistory(s),
       classes: s.classes.map((c) =>
         c.id === id ? { ...c, ...patch } : c,
       ),
@@ -238,6 +337,32 @@ export const useEditor = create<State & Actions>((set) => ({
     set((s) => ({ bottomPanelCollapsed: !s.bottomPanelCollapsed })),
   setLastJob: (job) => set({ lastJob: job }),
   setIsRunning: (running) => set({ isRunning: running }),
+  undo: () =>
+    set((s) => {
+      if (s.past.length === 0) return s;
+      const prev = s.past[s.past.length - 1];
+      return {
+        ...prev,
+        past: s.past.slice(0, -1),
+        future: [captureSnapshot(s), ...s.future].slice(0, MAX_HISTORY),
+        // Clear node selection — the selected node might not exist anymore
+        // after the rollback (e.g. it was an add that got undone).
+        selectedNodeId: null,
+        saveStatus: "dirty",
+      };
+    }),
+  redo: () =>
+    set((s) => {
+      if (s.future.length === 0) return s;
+      const next = s.future[0];
+      return {
+        ...next,
+        past: [...s.past, captureSnapshot(s)].slice(-MAX_HISTORY),
+        future: s.future.slice(1),
+        selectedNodeId: null,
+        saveStatus: "dirty",
+      };
+    }),
 }));
 
 // React Flow emits selection/dimension/position-during-drag changes as part
