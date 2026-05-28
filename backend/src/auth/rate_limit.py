@@ -45,4 +45,7 @@ limiter = Limiter(
     # default would silently rate-limit endpoints we don't want to (project
     # CRUD, file reads, autosave).
     default_limits=[],
+    # Tests set RATE_LIMIT_ENABLED=false so registering 10+ users in a row
+    # doesn't trip the per-IP buckets. Production never sets this.
+    enabled=os.environ.get("RATE_LIMIT_ENABLED", "true").lower() != "false",
 )

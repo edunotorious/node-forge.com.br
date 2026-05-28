@@ -61,16 +61,34 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8000
 
   # ---------------------------------------------------------------------------
-  # Backend — uv-managed Python 3.12; ruff lint + format check. Pytest
-  # is wired up in a follow-up commit once the auth-flow suite exists.
+  # Backend — uv-managed Python 3.12; ruff lint + format check + pytest.
+  # Pytest needs Postgres, so we run it as a GitHub Actions service container
+  # — same major (16) as production.
   # ---------------------------------------------------------------------------
   backend:
-    name: backend (ruff)
+    name: backend (ruff + pytest)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nodeforge_test
+        ports:
+          - 5432:5432
+        # Health-check loop so the job doesn't race the container.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
+    env:
+      DATABASE_URL_TEST: postgresql+asyncpg://postgres:postgres@localhost:5432/nodeforge_test
     steps:
       - uses: actions/checkout@v4
 
@@ -87,6 +105,9 @@ jobs:
 
       - name: Ruff format check
         run: uv run ruff format --check .
+
+      - name: Pytest
+        run: uv run pytest
 
   # ---------------------------------------------------------------------------
   # Executor — same Python tooling as backend. No uv.lock committed yet, so

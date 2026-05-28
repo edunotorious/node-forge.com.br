@@ -25,6 +25,11 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ruff>=0.7.0,<1",
+    "pytest>=8.3.0,<9",
+    "pytest-asyncio>=0.24.0,<1",
+    # ASGITransport-based in-process client. Faster + simpler than spinning
+    # an actual server for tests.
+    "httpx>=0.27.0,<1",
 ]
 
 [tool.ruff]
@@ -33,3 +38,14 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+# auto-mode: every `async def test_…` is treated as a coroutine test; no
+# need to decorate each one with @pytest.mark.asyncio.
+asyncio_mode = "auto"
+# Both fixture- and test-loop scopes default to function so each test
+# gets a fresh loop. The engine fixture is function-scoped too — see the
+# comment in conftest.py for why session scope deadlocks under asyncpg.
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers"]
