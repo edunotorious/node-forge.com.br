@@ -342,7 +342,7 @@ function VaultProfileForm({
               key={idx}
               defaultValue={initial.social_accounts[idx] ?? ""}
               onBlur={(e) => commitSocial(idx, e.target.value)}
-              className="h-10 bg-muted"
+              className="h-10 ring-1 ring-foreground/15"
             />
           ))}
         </div>
@@ -385,7 +385,7 @@ function Field({
       <Input
         defaultValue={defaultValue}
         onBlur={(e) => onBlur(e.target.value)}
-        className="h-10 bg-muted"
+        className="h-10 ring-1 ring-foreground/15"
       />
     </div>
   );
@@ -407,7 +407,7 @@ function FieldTextarea({
         defaultValue={defaultValue}
         onBlur={(e) => onBlur(e.target.value)}
         rows={6}
-        className="w-full resize-none rounded-md border-transparent bg-muted px-3 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="w-full resize-none rounded-md border-transparent bg-input px-3 py-2 text-sm outline-none ring-1 ring-foreground/15 focus-visible:ring-3 focus-visible:ring-ring/50"
       />
     </div>
   );
