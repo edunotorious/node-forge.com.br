@@ -1,0 +1,55 @@
+name: CodeQL
+
+# CodeQL runs on push to main, on every PR, and on a weekly cron so
+# advisories for newly-released CVEs get re-scanned against the current
+# codebase without waiting for someone to push.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Saturday 09:00 UTC — quiet for the runner pool, well before the
+    # Monday Dependabot wave so any vulns get triaged in one sitting.
+    - cron: "0 9 * * 6"
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # TypeScript + JavaScript are unified under `javascript-typescript`
+          # in the v3 action — covers all of frontend/.
+          - language: javascript-typescript
+          - language: python
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          language: ${{ matrix.language }}
+          # Default queries + security-extended catches more (but adds time);
+          # 30 min timeout has slack for this on our small codebase.
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

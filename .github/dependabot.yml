@@ -1,0 +1,119 @@
+# Dependabot keeps every dependency surface watched on a weekly cadence.
+# Weekly (not daily) so PR volume stays human-reviewable; on Monday so the
+# week starts with a clean signal of what needs attention.
+#
+# Major-version bumps are grouped per ecosystem to avoid PR sprawl — patches
+# and minors come through individually so they can land fast.
+version: 2
+
+updates:
+  # ---------------------------------------------------------------------------
+  # GitHub Actions — pin third-party actions to SHAs only on prod-critical
+  # workflows; for now tag updates are fine since our CI is build/test only.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 5
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: ci
+      include: scope
+
+  # ---------------------------------------------------------------------------
+  # Frontend (npm/pnpm). production vs development is grouped separately so
+  # devDep churn (eslint, types) doesn't bury runtime updates.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 10
+    labels: [dependencies, frontend]
+    commit-message:
+      prefix: chore(frontend)
+      include: scope
+    groups:
+      frontend-prod:
+        dependency-type: production
+        update-types: [minor, patch]
+      frontend-dev:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  # ---------------------------------------------------------------------------
+  # Backend (pip — uv reads pyproject + uv.lock; dependabot speaks pip
+  # against pyproject.toml which is what matters here).
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 10
+    labels: [dependencies, backend]
+    commit-message:
+      prefix: chore(backend)
+      include: scope
+    groups:
+      backend-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /executor
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 10
+    labels: [dependencies, executor]
+    commit-message:
+      prefix: chore(executor)
+      include: scope
+    groups:
+      executor-minor-patch:
+        update-types: [minor, patch]
+
+  # ---------------------------------------------------------------------------
+  # Docker base images. node:22-alpine, postgres:16-alpine, python:3.12-slim,
+  # etc. — these have a long tail of CVE drift if we don't watch them.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, docker, frontend]
+    commit-message:
+      prefix: chore(docker)
+      include: scope
+
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, docker, backend]
+    commit-message:
+      prefix: chore(docker)
+      include: scope
+
+  - package-ecosystem: docker
+    directory: /executor
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, docker, executor]
+    commit-message:
+      prefix: chore(docker)
+      include: scope
