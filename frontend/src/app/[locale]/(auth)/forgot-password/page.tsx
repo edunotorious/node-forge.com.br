@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -17,6 +17,12 @@ type Values = { email: string };
 
 export default function ForgotPasswordPage() {
   const t = useTranslations("auth.forgotPassword");
+  // The active product locale (chosen via the UI's language switcher).
+  // We override Accept-Language with this so the backend's email template
+  // picks the same language as the page the user is reading. The browser's
+  // own Accept-Language can be different (Chrome configured in English
+  // even when the user is in Brazil).
+  const locale = useLocale();
   const [sent, setSent] = useState(false);
 
   const schema = z.object({
@@ -36,7 +42,10 @@ export default function ForgotPasswordPage() {
     mutationFn: async (values: Values) => {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Accept-Language": locale,
+        },
         body: JSON.stringify(values),
       });
       if (!res.ok) {

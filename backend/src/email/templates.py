@@ -105,13 +105,20 @@ def render_password_reset_html(locale: str, link: str) -> tuple[str, str, str]:
     important for clients that block HTML by default."""
     copy = _COPY.get(locale, _COPY["pt-BR"])
 
+    # Wordmark rendered as styled HTML text rather than the SVG data URL —
+    # Gmail's web client strips inline data: image sources, which would
+    # leave the recipient staring at a broken-image icon. The text form
+    # always renders. When node-forge.com.br starts serving static assets,
+    # we can swap this for `<img src="https://node-forge.com.br/logo.svg">`
+    # which Gmail does proxy and display.
     html = f"""\
 <!doctype html>
 <html lang="{locale}">
 <body style="margin:0;padding:0;background:#E8E8E8;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0C1532;">
   <div style="max-width:540px;margin:0 auto;padding:40px 24px;">
     <div style="text-align:center;margin-bottom:32px;">
-      <img src="{_LOGO_DATA_URL}" alt="NODE-FORGE" style="height:36px;width:auto;display:inline-block;" />
+      <span style="font-size:28px;font-weight:900;letter-spacing:-0.02em;color:#0C1532;">NODE</span>
+      <span style="font-size:28px;font-weight:900;color:#F08230;">&nbsp;FORGE&nbsp;</span>
     </div>
     <p style="font-size:18px;line-height:1.5;margin:0 0 16px;">{copy.greeting}</p>
     <p style="font-size:14px;line-height:1.6;color:#3a3a3a;margin:0 0 28px;">{copy.body_html}</p>
