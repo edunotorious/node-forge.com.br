@@ -1,9 +1,11 @@
 import { cn } from "@/lib/utils";
 
-import { AnvilIcon } from "./anvil-logo";
+import { Logo } from "./logo";
 
-// NODE [anvil] FORGE wordmark. Inherits color from parent for the text; the
-// anvil itself is always brand-orange. Use `size` to scale uniformly.
+// Sized wrapper around the official Logo SVG. Existing callers
+// (TopBar, Login/Register/Forgot/Reset pages) keep their `size` API
+// unchanged. The Logo's intrinsic aspect ratio (~7.4:1) means we only
+// need to set a height — width follows automatically.
 export function Wordmark({
   size = "md",
   className,
@@ -11,30 +13,12 @@ export function Wordmark({
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
 }) {
-  const text = {
-    sm: "text-base",
-    md: "text-xl",
-    lg: "text-3xl",
-    xl: "text-6xl",
-  }[size];
-  const anvil = {
-    sm: "h-3 w-5",
-    md: "h-4 w-7",
-    lg: "h-6 w-10",
-    xl: "h-12 w-20",
+  const height = {
+    sm: "h-4",
+    md: "h-6",
+    lg: "h-9",
+    xl: "h-14",
   }[size];
 
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 font-heading font-black tracking-tight whitespace-nowrap",
-        text,
-        className,
-      )}
-    >
-      <span>NODE</span>
-      <AnvilIcon className={cn("text-primary", anvil)} />
-      <span>FORGE</span>
-    </span>
-  );
+  return <Logo className={cn(height, className)} />;
 }
