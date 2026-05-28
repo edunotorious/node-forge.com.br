@@ -45,6 +45,7 @@ _RESET_TOKEN_TTL = timedelta(hours=1)
 def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 _settings = get_settings()
@@ -295,13 +296,10 @@ async def reset_password(
     Token validation is a single query keyed on the hash — never on the
     user id, so brute-forcing user IDs gets you nowhere."""
     now = datetime.now(UTC)
-    stmt = (
-        select(PasswordResetToken)
-        .where(
-            PasswordResetToken.token_hash == _hash_token(data.token),
-            PasswordResetToken.used_at.is_(None),
-            PasswordResetToken.expires_at > now,
-        )
+    stmt = select(PasswordResetToken).where(
+        PasswordResetToken.token_hash == _hash_token(data.token),
+        PasswordResetToken.used_at.is_(None),
+        PasswordResetToken.expires_at > now,
     )
     token = (await session.execute(stmt)).scalar_one_or_none()
     if token is None:

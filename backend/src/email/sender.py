@@ -47,8 +47,7 @@ async def send_password_reset(
     if backend == "resend":
         if not settings.resend_api_key:
             print(
-                "[email/resend] RESEND_API_KEY is empty — falling back to "
-                f"stdout. link={link}",
+                f"[email/resend] RESEND_API_KEY is empty — falling back to stdout. link={link}",
                 flush=True,
             )
             return
@@ -70,8 +69,7 @@ async def send_password_reset(
                 )
             if res.status_code >= 400:
                 print(
-                    f"[email/resend] {res.status_code} for to={to_email}: "
-                    f"{res.text[:500]}",
+                    f"[email/resend] {res.status_code} for to={to_email}: {res.text[:500]}",
                     flush=True,
                 )
             else:

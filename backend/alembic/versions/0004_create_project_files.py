@@ -56,9 +56,7 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.func.now(),
         ),
-        sa.UniqueConstraint(
-            "project_id", "name", name="uq_project_files_project_name"
-        ),
+        sa.UniqueConstraint("project_id", "name", name="uq_project_files_project_name"),
     )
     op.create_index(
         "idx_project_files_project_position",
@@ -105,12 +103,8 @@ def downgrade() -> None:
     )
     # Any project with no project_files row gets an empty graph so the NOT
     # NULL alter below does not fail.
-    op.execute(
-        "UPDATE projects SET graph_json = '{}'::jsonb WHERE graph_json IS NULL"
-    )
+    op.execute("UPDATE projects SET graph_json = '{}'::jsonb WHERE graph_json IS NULL")
     op.alter_column("projects", "graph_json", nullable=False)
 
-    op.drop_index(
-        "idx_project_files_project_position", table_name="project_files"
-    )
+    op.drop_index("idx_project_files_project_position", table_name="project_files")
     op.drop_table("project_files")

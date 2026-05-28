@@ -44,17 +44,11 @@ def _file_not_found() -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
 
 
-async def _get_owned(
-    session: AsyncSession, project_id: uuid.UUID, user_id: uuid.UUID
-) -> Project:
+async def _get_owned(session: AsyncSession, project_id: uuid.UUID, user_id: uuid.UUID) -> Project:
     """Load a project (with its files eagerly loaded) and verify ownership.
     Returns 404 on miss OR ownership mismatch so an attacker cannot enumerate
     project IDs by status code alone."""
-    stmt = (
-        select(Project)
-        .where(Project.id == project_id)
-        .options(selectinload(Project.files))
-    )
+    stmt = select(Project).where(Project.id == project_id).options(selectinload(Project.files))
     project = (await session.execute(stmt)).scalar_one_or_none()
     if project is None or project.user_id != user_id:
         raise _not_found()

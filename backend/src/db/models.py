@@ -39,9 +39,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     # NULL until the user picks one. Unique-with-nulls (Postgres treats NULLs
     # as distinct) lets multiple users coexist with no username.
-    username: Mapped[str | None] = mapped_column(
-        String(64), unique=True, nullable=True
-    )
+    username: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     # Avatar bytes inlined into the row. PNG only, capped at 1 MB by the
     # upload endpoint; Postgres TOAST handles the compression. Object
     # storage is a future migration once we know who actually uploads.
@@ -91,15 +89,9 @@ class PasswordResetToken(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
-    token_hash: Mapped[str] = mapped_column(
-        String(64), nullable=False, unique=True
-    )
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-    used_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -182,9 +174,7 @@ class ProjectFile(Base):
         default=lambda: DEFAULT_GRAPH.copy(),
         server_default=text("'{}'::jsonb"),
     )
-    position: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
-    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -230,25 +220,17 @@ class ExecutionJob(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
-    status: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="queued"
-    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="queued")
     stdout: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     stderr: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     # Both a Python-side default (for ORM-driven INSERTs) and a SQL-side
     # default in the migration ('[]'::jsonb). See 0003 for the bind-regex
     # analysis explaining why the Phase-5 trap does not apply to this
     # literal. Lista de {kind, source_node_id, data_b64}.
-    artifacts_json: Mapped[list[Any]] = mapped_column(
-        JSONB, nullable=False, default=lambda: []
-    )
+    artifacts_json: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=lambda: [])
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -260,6 +242,4 @@ class ExecutionJob(Base):
     )
 
     user: Mapped["User"] = relationship("User", back_populates="execution_jobs")
-    project: Mapped["Project"] = relationship(
-        "Project", back_populates="execution_jobs"
-    )
+    project: Mapped["Project"] = relationship("Project", back_populates="execution_jobs")

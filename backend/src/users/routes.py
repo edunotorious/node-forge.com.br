@@ -122,9 +122,7 @@ async def get_avatar(
     user: Annotated[User, Depends(get_current_user)],
 ) -> Response:
     if user.avatar_data is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No avatar set"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No avatar set")
     return Response(
         content=user.avatar_data,
         media_type=user.avatar_mime or "image/png",

@@ -73,9 +73,7 @@ _DEFAULT_LITERAL = {
 }
 
 
-def _topo_sort(
-    nodes: list[dict[str, Any]], edges: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
+def _topo_sort(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Kahn's algorithm. Returns nodes in a valid execution order.
     Disconnected nodes appear at the end (no incoming edges, no outgoing).
     """
@@ -409,9 +407,7 @@ def generate_python(graph: dict[str, Any]) -> str:
             # Plot without a Run, emit a clear runtime error rather than a
             # NameError deep in qiskit.
             lines.append("")
-            lines.append(
-                "raise RuntimeError('PlotHistogram requires a Run node upstream')"
-            )
+            lines.append("raise RuntimeError('PlotHistogram requires a Run node upstream')")
         else:
             lines.append("_fig = plot_histogram(_counts)")
             lines.append("_fig.savefig('histogram.png', bbox_inches='tight')")

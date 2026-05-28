@@ -33,22 +33,14 @@ async def _get_owned_file(
     """Mirror of projects/_get_owned_file — duplicated here so the runner
     module is self-contained and doesn't import from projects.routes (which
     would cross-couple the two modules)."""
-    stmt = (
-        select(Project)
-        .where(Project.id == project_id)
-        .options(selectinload(Project.files))
-    )
+    stmt = select(Project).where(Project.id == project_id).options(selectinload(Project.files))
     project = (await session.execute(stmt)).scalar_one_or_none()
     if project is None or project.user_id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     for f in project.files:
         if f.id == file_id:
             return f
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
-    )
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
 
 
 async def _run_in_background(job_id: uuid.UUID, code: str) -> None:
@@ -121,9 +113,7 @@ async def run_file(
     try:
         code = generate_python(file.graph_json)
     except GraphCycleError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     job = ExecutionJob(project_id=project_id, user_id=user.id, status="queued")
     session.add(job)
@@ -142,9 +132,7 @@ async def get_job(
 ) -> ExecutionJob:
     job = await session.get(ExecutionJob, job_id)
     if job is None or job.user_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     return job
 
 
