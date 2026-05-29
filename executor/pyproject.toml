@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Node-Forge executor service (FastAPI runner for user Qiskit scripts)"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "fastapi>=0.115.0,<0.116",
+    "fastapi>=0.115.0,<0.137",
     "uvicorn[standard]>=0.32.0,<0.33",
     "pydantic>=2.9.0,<3",
     "pydantic-settings>=2.5.0,<3",
