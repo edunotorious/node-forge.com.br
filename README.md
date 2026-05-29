@@ -31,6 +31,8 @@ Domínio público alvo: [node-forge.com.br](https://node-forge.com.br) (deploy a
 - [Envio de email](#envio-de-email-recuperação-de-senha)
 - [Primeiro Hello World](#primeiro-hello-world)
 - [Comandos úteis](#comandos-úteis)
+- [Testes](#testes)
+- [CI/CD](#cicd)
 - [Estrutura do repositório](#estrutura-do-repositório)
 - [Subindo pro GitHub](#subindo-pro-github)
 - [Trabalhando em equipe](#trabalhando-em-equipe)
@@ -52,6 +54,8 @@ Domínio público alvo: [node-forge.com.br](https://node-forge.com.br) (deploy a
 - **Projects**: grid de cards, duplicar projeto (clona arquivos), upload de thumbnail, rename, delete, context menu por click direito
 - **i18n**: UI completamente bilíngue (PT-BR + EN) via next-intl, language switcher no header
 - **Async runs**: polling do `GET /jobs/:id` para circuitos longos não travarem a conexão
+- **Testes automatizados**: suíte E2E com Playwright cobrindo register/login/Hello World ponta-a-ponta + pytest no backend cobrindo a superfície de auth (register, login, me, logout, rate limit)
+- **Headers de segurança**: CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy em todas as respostas; CORSMiddleware no FastAPI com origens em allowlist explícita
 
 ---
 
@@ -354,7 +358,94 @@ docker compose exec frontend pnpm lint
 
 # Lint backend
 uv run --project backend ruff check backend/src/
+
+# E2E (Playwright, roda do host contra a stack já no ar)
+cd frontend && pnpm test:e2e
+
+# Pytest (backend, exige nodeforge_test DB no postgres local)
+cd backend && DATABASE_URL_TEST="postgresql+asyncpg://postgres:postgres@localhost:5432/nodeforge_test" uv run pytest
 ```
+
+---
+
+## Testes
+
+Duas camadas, cada uma cobrindo um risco diferente:
+
+### Frontend — Playwright E2E
+
+3 specs em `frontend/tests/e2e/` que rodam contra a stack inteira via Docker
+Compose. Cobre os caminhos críticos que quebrariam o produto se regredissem:
+
+- `auth.spec.ts` — proxy redirect quando deslogado (`/projects` → `/login?next=`),
+  loop completo de register → login → projects → logout
+- `hello-world.spec.ts` — registra um usuário, semeia um circuito Bell state
+  via BFF, executa no sandbox e valida que o Aer simulator retornou só
+  contagens `|00>` e `|11>` (nunca `|01>` ou `|10>` — semântica quântica
+  do emaranhamento)
+
+Primeiro uso instala o Chromium:
+
+```bash
+cd frontend
+pnpm install
+pnpm test:e2e:install   # baixa Chromium + libs do sistema
+pnpm test:e2e           # roda os 3 specs (~15s)
+```
+
+O browser fica fixado em `pt-BR` (locale + `Accept-Language`) pra os
+seletores casarem com os textos do produto. Para abrir o painel de
+debug interativo do Playwright: `pnpm test:e2e:ui`.
+
+### Backend — pytest
+
+12 testes em `backend/tests/test_auth.py` cobrindo register/login/me/logout
++ as branches de erro (duplicado, senha curta, email inválido, senha errada,
+email desconhecido). Um teste dedicado liga o rate limiter de volta e
+prova que o teto de 5/minute realmente devolve 429 na 6ª tentativa.
+
+```bash
+# Cria o DB de teste uma vez:
+docker compose exec postgres psql -U postgres -c "CREATE DATABASE nodeforge_test;"
+
+# Roda:
+cd backend
+DATABASE_URL_TEST="postgresql+asyncpg://postgres:postgres@localhost:5432/nodeforge_test" \
+  uv run pytest
+```
+
+A conftest desliga o rate limiter (`RATE_LIMIT_ENABLED=false`) pro grosso
+da suíte poder empilhar requests sem dormir entre cada um. A produção
+nunca seta essa env var.
+
+---
+
+## CI/CD
+
+GitHub Actions roda em todo push pra `main` e em todo PR — `.github/workflows/ci.yml`.
+Quatro jobs em paralelo:
+
+| Job | O que faz |
+|---|---|
+| **frontend** | `pnpm install` + `lint` + `typecheck` + `build` |
+| **backend** | `uv sync` + `ruff check` + `ruff format --check` + `pytest` (com `postgres:16-alpine` como service container) |
+| **executor** | `uvx ruff check` + `uvx ruff format --check` |
+| **e2e** | Sobe a stack inteira via Docker Compose, instala Chromium, roda a suíte Playwright, publica o HTML report como artifact em todo run |
+
+Concurrency é agrupada por ref — push novo cancela run em andamento da
+mesma branch.
+
+### Segurança proativa
+
+- **Dependabot** (`.github/dependabot.yml`) escaneia toda semana
+  (segunda 06:00 America/Sao_Paulo) cada superfície de dependência:
+  GitHub Actions, npm em `frontend/`, pip em `backend/` e `executor/`, e
+  bases de imagem Docker. Minor/patch são agrupados; major vem como PR
+  individual.
+- **CodeQL** (`.github/workflows/codeql.yml`) analisa
+  `javascript-typescript` e `python` em todo push/PR e re-roda no
+  cron de sábado 09:00 UTC. Queries `security-extended` +
+  `security-and-quality`.
 
 ---
 
@@ -362,7 +453,13 @@ uv run --project backend ruff check backend/src/
 
 ```
 node-forge/
+├── .github/
+│   ├── workflows/               # ci.yml (4-job pipeline) + codeql.yml
+│   └── dependabot.yml           # Weekly Monday scans
+│
 ├── frontend/                    # Next.js 16 App Router
+│   ├── tests/e2e/               # Playwright specs + helpers
+│   ├── playwright.config.ts
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── [locale]/        # Rotas localizadas (pt-BR | en)
@@ -383,6 +480,7 @@ node-forge/
 │   └── Dockerfile
 │
 ├── backend/                     # FastAPI + SQLAlchemy
+│   ├── tests/                   # pytest suite (auth coverage)
 │   ├── src/
 │   │   ├── auth/                # login, register, change me, forgot/reset, rate limit
 │   │   ├── projects/            # CRUD + files + thumbnail + duplicate
@@ -509,6 +607,10 @@ hardening listadas.
 - ✅ Profile com avatar upload (PNG/JPEG/WebP/GIF)
 - ✅ Projects com duplicar, rename, thumbnail upload, context menu
 - ✅ UI bilíngue PT-BR + EN
+- ✅ Suíte E2E (Playwright) + pytest backend cobrindo auth
+- ✅ CI/CD GitHub Actions (lint + typecheck + build + tests + e2e em todo PR)
+- ✅ Dependabot semanal + CodeQL (security-extended)
+- ✅ Security headers no Next (CSP, HSTS, Frame-Options, Permissions-Policy) + CORS no FastAPI
 
 ### Em planejamento
 
@@ -520,10 +622,11 @@ hardening listadas.
 
 ### Produção / hardening
 
-- Substituir `docker.sock` por sandbox seguro (gVisor / Firecracker / rootless docker)
+- Substituir `docker.sock` por sandbox seguro (gVisor / Firecracker / rootless docker) — **maior risco aberto**
+- `JWT_SECRET` / `INTERNAL_API_TOKEN` via secret manager (Doppler, AWS Secrets Manager, Vault), não `.env`
 - Postgres gerenciado (RDS, Cloud SQL, Supabase)
 - TLS no domínio com Let's Encrypt + reverse proxy (Caddy ou Traefik)
-- CI/CD via GitHub Actions (test → build → deploy)
+- Pipeline de deploy disparado pelo CI (test → build → deploy)
 - Infraestrutura como código em `infra/` (Terraform para Oracle Cloud ou AWS)
 - Observabilidade: logs estruturados, métricas, tracing (OpenTelemetry)
 
