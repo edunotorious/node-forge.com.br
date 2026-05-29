@@ -27,6 +27,12 @@ jobs:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Soft-fail: GitHub Code Scanning requires GitHub Advanced Security on
+    # private repos. Until the repo is either public or has GHAS enabled,
+    # the upload step in `analyze` fails. We let it stay red on its own
+    # tile without blocking the overall PR status — once the repo gets
+    # code scanning enabled, this flag should be removed.
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:

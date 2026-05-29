@@ -58,6 +58,12 @@ services:
     #
     # Reachable ONLY on executor-net (no host port published); the backend
     # is the sole client.
+    #
+    # Pinned `image:` so the built tag matches RUNNER_IMAGE regardless of
+    # the directory the user (or CI) ran `docker compose up` from. Without
+    # this, Compose names the image `<dirname>-executor:latest` and the
+    # /run handler 500s with "Runner image not found".
+    image: node-forge-executor:latest
     build:
       context: ./executor
       dockerfile: Dockerfile

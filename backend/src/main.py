@@ -17,9 +17,7 @@ settings = get_settings()
 # entries (trailing commas, double commas) are dropped. The browser
 # normally never talks here — the BFF proxy on Next is the only origin —
 # but we keep this strict in case the API ever gets exposed directly.
-_allowed_origins = [
-    origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()
-]
+_allowed_origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
 
 app = FastAPI(title="Node-Forge API", version="0.1.0")
 
