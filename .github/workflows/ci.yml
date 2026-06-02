@@ -190,8 +190,32 @@ jobs:
           NEXT_PUBLIC_API_URL=http://localhost:8000
           EOF
 
+      # `docker compose up --build` pulls base images on first run; Docker
+      # Hub's `registry-1.docker.io` periodically times out with
+      # "context deadline exceeded" — especially during the Dependabot
+      # firehose on Monday mornings when every dep PR triggers a build.
+      # Three attempts with backoff is enough to ride out transient
+      # registry hiccups without masking a real build failure (the
+      # underlying compose error still ends up in the log of the final
+      # attempt if all three fail).
       - name: Bring up stack
-        run: docker compose up -d --build
+        run: |
+          set +e
+          for attempt in 1 2 3; do
+            echo "::group::compose up (attempt $attempt/3)"
+            docker compose up -d --build
+            rc=$?
+            echo "::endgroup::"
+            if [ $rc -eq 0 ]; then
+              echo "compose up succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "compose up failed (rc=$rc) — tearing down before retry"
+            docker compose down -v --remove-orphans || true
+            sleep $((attempt * 10))
+          done
+          echo "compose up failed after 3 attempts"
+          exit 1
 
       - name: Wait for frontend
         run: |
