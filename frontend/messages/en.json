@@ -132,6 +132,7 @@
     "backToProjects": "Back to projects",
     "projectNamePlaceholder": "Project name",
     "save": "Save",
+    "publishToVault": "Publish to Vault",
     "run": "Run",
     "runDisabledTooltip": "Available in Phase 7",
     "autosaveFailed": "Failed to save project",
@@ -380,5 +381,80 @@
   "metadata": {
     "title": "Node-Forge",
     "description": "Visual IDE for quantum computing."
+  },
+  "vault": {
+    "title": "Node Vault",
+    "subtitle": "An open library of circuits published by the community. Clone, study, remix.",
+    "searchPlaceholder": "Search by title or description...",
+    "by": "by",
+    "cloneToProjects": "Clone to my projects",
+    "cloning": "Cloning...",
+    "republish": "Republish",
+    "republishing": "Republishing...",
+    "unpublish": "Unpublish",
+    "unpublishConfirm": "Unpublish this listing? Anyone who already cloned keeps their copy, but the listing disappears from the Vault.",
+    "backToList": "Back to Vault",
+    "deletedAuthor": "[deleted author]",
+    "sort": {
+      "label": "Sort",
+      "recent": "Recent",
+      "popular": "Popular",
+      "liked": "Most liked"
+    },
+    "empty": {
+      "brandNew": "The Vault is empty.",
+      "beFirst": "Be the first to publish a circuit.",
+      "filtered": "No matches for this filter.",
+      "tryDifferent": "Try a different search or remove the tag."
+    },
+    "preview": {
+      "qubits": "Qubits",
+      "classical": "Classical bits",
+      "shots": "Shots",
+      "gates": "Nodes",
+      "empty": "File has no nodes.",
+      "gateSequence": "Execution sequence",
+      "connections": "node connection(s)"
+    },
+    "comments": {
+      "title": "Comments",
+      "placeholder": "Share what you think of this circuit...",
+      "post": "Post",
+      "posting": "Posting...",
+      "delete": "Delete",
+      "empty": "No comments yet. Be the first.",
+      "loading": "Loading...",
+      "signInToComment": "Sign in to comment"
+    },
+    "toast": {
+      "signInToInteract": "Sign in to like",
+      "signInToClone": "Sign in to clone",
+      "likeFailed": "Like failed",
+      "cloneSuccess": "Copy created in your projects",
+      "cloneFailed": "Clone failed",
+      "republishSuccess": "Listing refreshed with the latest version",
+      "republishFailed": "Republish failed",
+      "unpublishSuccess": "Listing removed",
+      "unpublishFailed": "Unpublish failed",
+      "commentFailed": "Comment failed",
+      "commentDeleteFailed": "Delete failed"
+    },
+    "publish": {
+      "title": "Publish to Node Vault",
+      "description": "Creates a read-only snapshot of this project for others to view, clone, and like.",
+      "titleField": "Title",
+      "descriptionField": "Description",
+      "descriptionPlaceholder": "What does this circuit do, when is it interesting, where did you learn it from...",
+      "tagsField": "Tags",
+      "tagsPlaceholder": "Type a tag and press Enter",
+      "tagsHelp": "Up to 5 tags. Lowercase letters, digits, and dashes.",
+      "cancel": "Cancel",
+      "publish": "Publish",
+      "publishing": "Publishing...",
+      "toast": {
+        "success": "Published to the Vault",
+        "failed": "Publish failed"
+      }
+    }
   }
 }

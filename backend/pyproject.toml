@@ -39,6 +39,22 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
+# FastAPI idiom: `Query(...)`, `Depends(...)`, `Header(...)`, `Cookie(...)`,
+# `Path(...)`, `Form(...)`, `File(...)`, `Body(...)` as parameter defaults
+# are how the framework wires HTTP-layer concerns; B008's "no function calls
+# in defaults" rule is a false positive for these.
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Query",
+    "fastapi.Depends",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.Path",
+    "fastapi.Form",
+    "fastapi.File",
+    "fastapi.Body",
+]
+
 [tool.pytest.ini_options]
 # auto-mode: every `async def test_…` is treated as a coroutine test; no
 # need to decorate each one with @pytest.mark.asyncio.

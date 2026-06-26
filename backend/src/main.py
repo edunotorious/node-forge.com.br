@@ -10,6 +10,7 @@ from src.config import get_settings
 from src.projects.routes import router as projects_router
 from src.runner.routes import router as runner_router
 from src.users.routes import router as users_router
+from src.vault.routes import router as vault_router
 
 settings = get_settings()
 
@@ -43,6 +44,7 @@ app.include_router(auth_router)
 app.include_router(projects_router)
 app.include_router(runner_router)
 app.include_router(users_router)
+app.include_router(vault_router)
 
 
 @app.get("/health")

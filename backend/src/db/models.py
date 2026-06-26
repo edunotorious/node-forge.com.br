@@ -3,16 +3,19 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
     LargeBinary,
+    PrimaryKeyConstraint,
     String,
     Text,
     UniqueConstraint,
     Uuid,
+    false,
     func,
     text,
 )
@@ -243,3 +246,96 @@ class ExecutionJob(Base):
 
     user: Mapped["User"] = relationship("User", back_populates="execution_jobs")
     project: Mapped["Project"] = relationship("Project", back_populates="execution_jobs")
+
+
+class VaultListing(Base):
+    """A published, snapshot copy of a project (one or more files).
+
+    Snapshots are intentional: a listing is what other users see and
+    clone, and the author should be able to keep tinkering on the
+    original project without breaking studied copies. Re-publishing
+    refreshes the snapshot; we don't keep historical versions in MVP.
+    """
+
+    __tablename__ = "vault_listings"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source_project_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    slug: Mapped[str] = mapped_column(String(220), nullable=False, unique=True)
+    files_snapshot: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=lambda: [])
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    clone_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    like_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    comment_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
+    author: Mapped["User | None"] = relationship("User", foreign_keys=[author_id])
+    tags: Mapped[list["VaultTag"]] = relationship(
+        "VaultTag", cascade="all, delete-orphan", back_populates="listing"
+    )
+
+
+class VaultTag(Base):
+    __tablename__ = "vault_tags"
+    __table_args__ = (
+        PrimaryKeyConstraint("listing_id", "tag", name="pk_vault_tags"),
+        Index("idx_vault_tags_tag", "tag"),
+    )
+
+    listing_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("vault_listings.id", ondelete="CASCADE"), nullable=False
+    )
+    tag: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    listing: Mapped["VaultListing"] = relationship("VaultListing", back_populates="tags")
+
+
+class VaultLike(Base):
+    __tablename__ = "vault_likes"
+    __table_args__ = (
+        PrimaryKeyConstraint("user_id", "listing_id", name="pk_vault_likes"),
+        Index("idx_vault_likes_listing_id", "listing_id"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    listing_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("vault_listings.id", ondelete="CASCADE"), nullable=False
+    )
+    liked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class VaultComment(Base):
+    __tablename__ = "vault_comments"
+    __table_args__ = (Index("idx_vault_comments_listing_created", "listing_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    listing_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("vault_listings.id", ondelete="CASCADE"), nullable=False
+    )
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+
+    author: Mapped["User | None"] = relationship("User", foreign_keys=[author_id])

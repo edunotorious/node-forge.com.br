@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowLeft, Loader2, Save } from "lucide-react";
+import { ArrowLeft, Loader2, Save, Upload } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
+import { useState } from "react";
 
+import { PublishToVaultDialog } from "@/components/vault/publish-dialog";
 import { useEditor, type SaveStatus } from "@/stores/editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,10 +55,12 @@ export function EditorTopBar({
   onSaveNow: () => void;
 }) {
   const t = useTranslations("editor");
+  const projectId = useEditor((s) => s.projectId);
   const projectName = useEditor((s) => s.projectName);
   const setProjectName = useEditor((s) => s.setProjectName);
   const saveStatus = useEditor((s) => s.saveStatus);
   const lastSavedAt = useEditor((s) => s.lastSavedAt);
+  const [publishOpen, setPublishOpen] = useState(false);
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b bg-background px-3">
@@ -76,12 +80,28 @@ export function EditorTopBar({
         <Button
           variant="outline"
           size="sm"
+          onClick={() => setPublishOpen(true)}
+          disabled={!projectId || saveStatus === "saving"}
+        >
+          <Upload className="mr-1 h-4 w-4" /> {t("publishToVault")}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           onClick={onSaveNow}
           disabled={saveStatus === "saving"}
         >
           <Save className="mr-1 h-4 w-4" /> {t("save")}
         </Button>
       </div>
+      {projectId ? (
+        <PublishToVaultDialog
+          projectId={projectId}
+          projectName={projectName}
+          open={publishOpen}
+          onOpenChange={setPublishOpen}
+        />
+      ) : null}
     </header>
   );
 }

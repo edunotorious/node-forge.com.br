@@ -89,6 +89,81 @@ export async function requireUser(): Promise<User> {
   return user;
 }
 
+// ---------------------------------------------------------------------------
+// Vault — public marketplace surface. Returns are intentionally loose
+// (no big shared type with the backend) so the list/detail pages can
+// destructure exactly what they render.
+// ---------------------------------------------------------------------------
+export interface VaultAuthor {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  has_avatar: boolean;
+  country: string | null;
+}
+
+export interface VaultListingSummary {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  tags: string[];
+  author: VaultAuthor | null;
+  published_at: string;
+  updated_at: string;
+  clone_count: number;
+  like_count: number;
+  comment_count: number;
+  liked_by_me: boolean | null;
+}
+
+export interface VaultFileSnapshot {
+  name: string;
+  position: number;
+  graph_json: {
+    config?: { num_qubits?: number; num_classical?: number; shots?: number };
+    nodes?: Array<{ id: string; type?: string; data?: Record<string, unknown> }>;
+    edges?: Array<{ id: string; source: string; target: string }>;
+    [k: string]: unknown;
+  };
+}
+
+export interface VaultListingDetail extends VaultListingSummary {
+  files: VaultFileSnapshot[];
+}
+
+export async function listVaultListings(
+  params: {
+    q?: string;
+    tag?: string;
+    author?: string;
+    sort?: "recent" | "popular" | "liked";
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<VaultListingSummary[]> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  if (params.tag) qs.set("tag", params.tag);
+  if (params.author) qs.set("author", params.author);
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.offset) qs.set("offset", String(params.offset));
+  const res = await backendFetch(
+    `/vault${qs.toString() ? `?${qs.toString()}` : ""}`,
+  );
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function getServerVaultListing(
+  slug: string,
+): Promise<VaultListingDetail | null> {
+  const res = await backendFetch(`/vault/${encodeURIComponent(slug)}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export async function listServerProjects(): Promise<Project[]> {
   const res = await backendFetch("/projects");
   if (!res.ok) return [];

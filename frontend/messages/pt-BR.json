@@ -4,7 +4,7 @@
   },
   "nav": {
     "nodeVault": "Node Vault",
-    "nodeVaultComingSoon": "Em breve",
+    "nodeVaultComingSoon": "Em breve (legado)",
     "projects": "Projetos",
     "profileAria": "Abrir perfil",
     "languageSwitcherAria": "Trocar idioma"
@@ -132,6 +132,7 @@
     "backToProjects": "Voltar para projetos",
     "projectNamePlaceholder": "Nome do projeto",
     "save": "Salvar",
+    "publishToVault": "Publicar no Vault",
     "run": "Run",
     "runDisabledTooltip": "Disponível na Phase 7",
     "autosaveFailed": "Falha ao salvar projeto",
@@ -380,5 +381,80 @@
   "metadata": {
     "title": "Node-Forge",
     "description": "IDE visual para computação quântica."
+  },
+  "vault": {
+    "title": "Node Vault",
+    "subtitle": "Biblioteca aberta de circuitos publicados pela comunidade. Clone, estude e remixe.",
+    "searchPlaceholder": "Buscar por título ou descrição...",
+    "by": "por",
+    "cloneToProjects": "Clonar para meus projetos",
+    "cloning": "Clonando...",
+    "republish": "Republicar",
+    "republishing": "Republicando...",
+    "unpublish": "Despublicar",
+    "unpublishConfirm": "Despublicar essa listagem? Quem já clonou continua com a cópia, mas ela some do Vault.",
+    "backToList": "Voltar para o Vault",
+    "deletedAuthor": "[autor removido]",
+    "sort": {
+      "label": "Ordenar",
+      "recent": "Recentes",
+      "popular": "Populares",
+      "liked": "Mais curtidas"
+    },
+    "empty": {
+      "brandNew": "O Vault ainda está vazio.",
+      "beFirst": "Seja a primeira pessoa a publicar um circuito.",
+      "filtered": "Nada encontrado com esses filtros.",
+      "tryDifferent": "Tenta uma busca diferente ou remove a tag."
+    },
+    "preview": {
+      "qubits": "Qubits",
+      "classical": "Bits clássicos",
+      "shots": "Shots",
+      "gates": "Nodos",
+      "empty": "Arquivo sem nodos.",
+      "gateSequence": "Sequência de execução",
+      "connections": "conexão(ões) entre nodos"
+    },
+    "comments": {
+      "title": "Comentários",
+      "placeholder": "Compartilha o que achou desse circuito...",
+      "post": "Enviar",
+      "posting": "Enviando...",
+      "delete": "Excluir",
+      "empty": "Ainda não há comentários. Seja o primeiro.",
+      "loading": "Carregando...",
+      "signInToComment": "Faça login para comentar"
+    },
+    "toast": {
+      "signInToInteract": "Faça login para curtir",
+      "signInToClone": "Faça login para clonar",
+      "likeFailed": "Falha ao curtir",
+      "cloneSuccess": "Cópia criada nos seus projetos",
+      "cloneFailed": "Falha ao clonar",
+      "republishSuccess": "Listagem atualizada com a versão mais recente",
+      "republishFailed": "Falha ao republicar",
+      "unpublishSuccess": "Listagem removida",
+      "unpublishFailed": "Falha ao despublicar",
+      "commentFailed": "Falha ao enviar comentário",
+      "commentDeleteFailed": "Falha ao excluir comentário"
+    },
+    "publish": {
+      "title": "Publicar no Node Vault",
+      "description": "Cria uma cópia somente-leitura desse projeto pra outras pessoas verem, clonarem e curtirem.",
+      "titleField": "Título",
+      "descriptionField": "Descrição",
+      "descriptionPlaceholder": "Conta o que esse circuito faz, em quais condições funciona, em quem ele se inspira...",
+      "tagsField": "Tags",
+      "tagsPlaceholder": "Digite uma tag e pressione Enter",
+      "tagsHelp": "Até 5 tags. Letras minúsculas, números e hífens.",
+      "cancel": "Cancelar",
+      "publish": "Publicar",
+      "publishing": "Publicando...",
+      "toast": {
+        "success": "Publicado no Vault",
+        "failed": "Falha ao publicar"
+      }
+    }
   }
 }
