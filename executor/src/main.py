@@ -49,6 +49,14 @@ TIMEOUT_SECONDS = int(os.environ.get("EXECUTOR_TIMEOUT_SECONDS", "30"))
 RUNNER_IMAGE = os.environ.get("RUNNER_IMAGE", "node-forge-executor:latest")
 RUNNER_MEM_LIMIT = os.environ.get("RUNNER_MEM_LIMIT", "256m")
 RUNNER_CPUS = float(os.environ.get("RUNNER_CPUS", "1.0"))
+# Sandbox runtime. Default `runc` is the standard Linux runtime — fast
+# but the kernel surface is shared with the host (the docker.sock-mount
+# risk we documented). Set to `runsc` to route ephemeral runners through
+# gVisor, which intercepts syscalls in user space and presents a small,
+# safe subset to the host kernel. The runtime must be pre-registered in
+# /etc/docker/daemon.json's `runtimes` block on the host or the Docker
+# daemon rejects container creation with 400 Bad Request.
+RUNNER_RUNTIME = os.environ.get("RUNNER_RUNTIME", "runc")
 RUNNER_WORKDIR = "/work"
 
 app = FastAPI(title="Node-Forge Executor", version="0.2.0")
@@ -191,6 +199,8 @@ async def run(
             cap_drop=["ALL"],
             # PID limit: 100 keeps thread bombs from monopolising the host.
             pids_limit=100,
+            # `runc` (default) or `runsc` (gVisor) — see RUNNER_RUNTIME.
+            runtime=RUNNER_RUNTIME,
             detach=True,
         )
     except ImageNotFound as exc:

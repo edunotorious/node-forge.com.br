@@ -1,0 +1,102 @@
+name: Deploy
+
+# Runs only after CI on `main` finishes successfully. Cancels in-flight
+# deploys when a newer push lands so we never apply commit B and then
+# commit A out of order.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: SSH deploy to Oracle VM
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Skip if the upstream CI run failed (workflow_run fires on every
+    # completion, success or not). Always run for manual dispatches.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Load SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Pin the host key so the connection never prompts.
+          ssh-keyscan -t ed25519 137.131.143.114 >> ~/.ssh/known_hosts 2>/dev/null
+
+      # `git pull` runs as the `ubuntu` user, which is in the docker
+      # group (set up at install time) — no sudo needed for compose.
+      #
+      # We rebuild only when source files actually changed under each
+      # service's directory; this keeps redeploys fast when only the
+      # README or workflows move. The `git diff --quiet` returns 1 when
+      # there are changes, which our shell treats as "rebuild this one".
+      - name: Pull + selective rebuild + up
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ubuntu@137.131.143.114 'bash -se' <<'EOF'
+            set -euo pipefail
+            cd /opt/node-forge
+
+            BEFORE=$(git rev-parse HEAD)
+            git pull --ff-only origin main
+            AFTER=$(git rev-parse HEAD)
+
+            if [ "$BEFORE" = "$AFTER" ]; then
+              echo ">>> no new commits; skipping rebuild"
+              exit 0
+            fi
+
+            COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+
+            REBUILD_TARGETS=()
+            git diff --quiet "$BEFORE" "$AFTER" -- frontend/ || REBUILD_TARGETS+=(frontend)
+            git diff --quiet "$BEFORE" "$AFTER" -- backend/  || REBUILD_TARGETS+=(backend)
+            git diff --quiet "$BEFORE" "$AFTER" -- executor/ || REBUILD_TARGETS+=(executor)
+            # Compose / Caddy changes warrant a full up.
+            if ! git diff --quiet "$BEFORE" "$AFTER" -- docker-compose.yml docker-compose.prod.yml Caddyfile; then
+              echo ">>> compose or Caddyfile changed — applying full up"
+              $COMPOSE up -d --build
+              exit 0
+            fi
+
+            if [ ${#REBUILD_TARGETS[@]} -eq 0 ]; then
+              echo ">>> no service code changed; restarting nothing"
+              exit 0
+            fi
+
+            echo ">>> rebuilding: ${REBUILD_TARGETS[*]}"
+
+            # Frontend bakes its bundle into a named volume; nuke the
+            # cache so `next build` runs cleanly on next start. Other
+            # services build from scratch each time anyway.
+            for svc in "${REBUILD_TARGETS[@]}"; do
+              if [ "$svc" = "frontend" ]; then
+                $COMPOSE down frontend
+                docker volume rm -f node-forge_frontend_next_cache || true
+              fi
+            done
+
+            $COMPOSE up -d --build "${REBUILD_TARGETS[@]}"
+          EOF
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://node-forge.com.br/api/health || true)
+            if [ "$code" = "200" ]; then
+              echo "smoke ok after ${i} attempts"; exit 0
+            fi
+            sleep 4
+          done
+          echo "smoke check failed — site never returned 200 on /api/health"; exit 1
