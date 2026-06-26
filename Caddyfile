@@ -1,0 +1,31 @@
+# Production reverse proxy. Caddy auto-provisions Let's Encrypt certs
+# the first time each hostname is hit, then auto-renews.
+#
+# Both apex and www terminate here. www → apex redirect keeps URL space
+# canonical (HSTS preloading expects a single canonical host).
+
+{
+    email eduardogomespinho@gmail.com
+    # Comment out the line below to use staging (testing without rate limits)
+    # acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+www.node-forge.com.br {
+    redir https://node-forge.com.br{uri} permanent
+}
+
+node-forge.com.br {
+    # Pass everything through to Next on its container hostname. Next's
+    # BFF takes care of /api/* server-side; we don't need to fork
+    # /api/* to the backend here.
+    reverse_proxy frontend:3000
+
+    # Caddy already sends sane defaults, but pin a tight access log
+    # format so it's easy to grep when triaging.
+    log {
+        output stdout
+        format console
+    }
+
+    encode zstd gzip
+}

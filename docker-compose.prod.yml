@@ -1,0 +1,54 @@
+# Production overlay.
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+    networks:
+      - app-net
+
+  postgres:
+    restart: unless-stopped
+
+  backend:
+    restart: unless-stopped
+    ports: !reset []
+
+  executor:
+    restart: unless-stopped
+
+  frontend:
+    restart: unless-stopped
+    ports: !reset []
+    environment:
+      NODE_ENV: production
+    # Override the dev CMD: build the production bundle first run, then
+    # start the optimised server. Next 16 build artifact lives at /app/.next
+    # which is a named volume — survives restarts, gets rebuilt on first
+    # run if absent. The  guard keeps subsequent
+    # container restarts fast.
+    command:
+      - sh
+      - -c
+      - |
+        if [ ! -d .next/server ] || [ ! -f .next/BUILD_ID ]; then
+          echo ">>> building production bundle"
+          pnpm build
+        else
+          echo ">>> reusing existing production build"
+        fi
+        exec pnpm start
+
+volumes:
+  caddy_data:
+  caddy_config:
