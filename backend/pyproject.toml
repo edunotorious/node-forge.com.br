@@ -5,7 +5,7 @@ description = "Node-Forge backend (FastAPI + SQLAlchemy + Postgres)"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115.0,<0.116",
-    "uvicorn[standard]>=0.32.0,<0.33",
+    "uvicorn[standard]>=0.32.0,<0.51",
     "pydantic[email]>=2.9.0,<3",
     "pydantic-settings>=2.5.0,<3",
     "sqlalchemy[asyncio]>=2.0.30,<3",
