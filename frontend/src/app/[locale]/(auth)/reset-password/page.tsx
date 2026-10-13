@@ -55,10 +55,10 @@ function ResetPasswordForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, ...values }),
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail ?? t("errors.resetFailed"));
-      }
+      // The backend's `detail` is English ("Invalid or expired reset
+      // token"); the translated message covers every failure the user can
+      // act on (used, expired or malformed link → request a new one).
+      if (!res.ok) throw new Error(t("errors.resetFailed"));
     },
     onSuccess: () => setDone(true),
   });
