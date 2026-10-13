@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { AUTH_STATE_FILE } from "./tests/e2e/helpers";
+
 /**
  * Smoke E2E suite. Runs against an already-running stack — start it with
  * `docker compose up -d` from the repo root, then `pnpm test:e2e` here.
@@ -33,9 +35,13 @@ export default defineConfig({
     extraHTTPHeaders: { "Accept-Language": "pt-BR" },
   },
   projects: [
+    // Registers + logs in one shared user and saves its session; every
+    // chromium spec starts already authenticated (see auth.setup.ts).
+    { name: "setup", testMatch: /.*\.setup\.ts/ },
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], storageState: AUTH_STATE_FILE },
+      dependencies: ["setup"],
     },
   ],
 });

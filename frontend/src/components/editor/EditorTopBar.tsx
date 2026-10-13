@@ -51,8 +51,10 @@ function StatusLabel({
 
 export function EditorTopBar({
   onSaveNow,
+  flushSave,
 }: {
   onSaveNow: () => void;
+  flushSave: () => Promise<void>;
 }) {
   const t = useTranslations("editor");
   const projectId = useEditor((s) => s.projectId);
@@ -100,6 +102,7 @@ export function EditorTopBar({
           projectName={projectName}
           open={publishOpen}
           onOpenChange={setPublishOpen}
+          beforePublish={flushSave}
         />
       ) : null}
     </header>

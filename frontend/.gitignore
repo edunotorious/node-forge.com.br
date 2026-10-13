@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+# Session cookie of the shared e2e user (written by tests/e2e/auth.setup.ts)
+/playwright/.auth/
 
 # next.js
 /.next/

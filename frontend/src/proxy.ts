@@ -45,7 +45,9 @@ export function proxy(request: NextRequest) {
     if (!hasAuth) {
       const prefix = locale && locale !== routing.defaultLocale ? `/${locale}` : "";
       const loginUrl = new URL(`${prefix}/login`, request.url);
-      loginUrl.searchParams.set("next", pathname);
+      // Locale-less: the login page navigates with next-intl's router, which
+      // re-adds the active locale (`/en` + `/en/projects` → 404).
+      loginUrl.searchParams.set("next", pathnameWithoutLocale);
       return NextResponse.redirect(loginUrl);
     }
   }

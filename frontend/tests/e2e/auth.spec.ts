@@ -1,8 +1,14 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
-import { makeTestUser } from "./helpers";
+import { AUTH_USER_FILE, makeTestUser } from "./helpers";
 
 test.describe("auth roundtrip", () => {
+  // These tests are about signing in, so they start logged out instead of
+  // reusing the shared session from auth.setup.ts.
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   test("unauthenticated /projects redirects to /login with next param", async ({
     page,
   }) => {
@@ -42,9 +48,23 @@ test.describe("auth roundtrip", () => {
     await page.waitForURL(/\/login/);
   });
 
-  // NOTE: a third "wrong password" test was intentionally NOT added here.
-  // /auth/register is rate-limited at 3/minute per IP — running it on top
-  // of the two registers below (auth happy path + Hello World) would
-  // start tripping 429s. The wrong-password branch is covered by the
+  test("login from an English page returns to that page", async ({ page }) => {
+    // Logs the shared user in again (login allows 5/min) instead of
+    // registering another one against the 3/min register limit.
+    const user = JSON.parse(readFileSync(AUTH_USER_FILE, "utf8"));
+
+    await page.goto("/en/projects");
+    await expect(page).toHaveURL(/\/en\/login\?next=%2Fprojects$/);
+
+    await page.getByLabel("Email").fill(user.email);
+    await page.getByLabel("Password").fill(user.password);
+    await page.getByRole("button", { name: "LOGIN" }).click();
+
+    await page.waitForURL(/\/en\/projects$/, { timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  });
+
+  // NOTE: no "wrong password" test here — it would need another register
+  // against the 3/minute per-IP limit. That branch is covered by the
   // backend pytest suite where rate limits aren't in play.
 });

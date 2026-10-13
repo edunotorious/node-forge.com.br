@@ -27,6 +27,9 @@ interface PublishDialogProps {
   projectName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  // The listing snapshots what the server has, so pending editor edits must
+  // be saved first or the published copy would miss them.
+  beforePublish?: () => Promise<void>;
 }
 
 // "Publish to Vault" — snapshot the current project under a new title
@@ -37,6 +40,7 @@ export function PublishToVaultDialog({
   projectName,
   open,
   onOpenChange,
+  beforePublish,
 }: PublishDialogProps) {
   const t = useTranslations("vault.publish");
   const router = useRouter();
@@ -62,6 +66,7 @@ export function PublishToVaultDialog({
 
   const publish = useMutation({
     mutationFn: async () => {
+      await beforePublish?.();
       const res = await fetch("/api/vault", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

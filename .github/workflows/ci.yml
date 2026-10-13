@@ -20,8 +20,8 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Frontend — lint, typecheck, build. No tests here; the Playwright suite
-  # needs the full Docker stack and lives in the `e2e` job below.
+  # Frontend — lint, typecheck, unit tests (vitest), build. The Playwright
+  # suite needs the full Docker stack and lives in the `e2e` job below.
   # ---------------------------------------------------------------------------
   frontend:
     name: frontend (lint + typecheck + build)
@@ -53,6 +53,9 @@ jobs:
       # last green tree rather than getting masked by a build failure.
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
 
       - name: Build
         run: pnpm build
