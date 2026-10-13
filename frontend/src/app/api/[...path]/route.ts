@@ -11,8 +11,37 @@ const HOP_BY_HOP_RESPONSE = new Set([
   "keep-alive",
 ]);
 
+const BACKEND_ORIGIN = new URL(BACKEND_URL).origin;
+
+// Params arrive URL-decoded, so `%2F%2Fevil.com` shows up as an empty
+// segment followed by `evil.com` — joined naively that is a
+// protocol-relative URL and `new URL()` would resolve it to another host,
+// carrying the user's cookies and the internal token with it. Reject
+// anything that is not a plain path segment.
+function isSafeSegment(segment: string): boolean {
+  return (
+    segment !== "" &&
+    segment !== "." &&
+    segment !== ".." &&
+    !segment.includes("/") &&
+    !segment.includes("\\")
+  );
+}
+
+function badPath() {
+  return new Response(JSON.stringify({ detail: "Invalid path" }), {
+    status: 400,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 async function forward(request: NextRequest, segments: string[]) {
-  const url = new URL(`/${segments.join("/")}`, BACKEND_URL);
+  if (!segments.every(isSafeSegment)) return badPath();
+  const url = new URL(
+    `/${segments.map(encodeURIComponent).join("/")}`,
+    BACKEND_URL,
+  );
+  if (url.origin !== BACKEND_ORIGIN) return badPath();
   url.search = request.nextUrl.search;
 
   const headers = new Headers();

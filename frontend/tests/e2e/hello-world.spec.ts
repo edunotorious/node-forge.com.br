@@ -63,5 +63,38 @@ test.describe("Hello World — Bell state", () => {
     expect(consoleText).toMatch(/'11':\s*\d+/);
     expect(consoleText).not.toMatch(/'01':/);
     expect(consoleText).not.toMatch(/'10':/);
+
+    // Publishing rides on this test instead of its own spec: a separate
+    // spec would need a third /auth/register per run, and the 3/minute
+    // per-IP limit turns any retry into a 429.
+    await test.step("publish the circuit to the Vault", async () => {
+      await page.getByRole("button", { name: "Publicar no Vault" }).click();
+
+      // The title field is seeded from the project name on every open.
+      const dialog = page.getByRole("dialog");
+      const title = dialog.getByLabel("Título");
+      await expect(title).toHaveValue("E2E Hello World");
+
+      // Edits are discarded on close; the seed comes back on reopen.
+      await title.fill("Rascunho descartado");
+      await dialog.getByRole("button", { name: "Cancelar" }).click();
+      await expect(dialog).toBeHidden();
+      await page.getByRole("button", { name: "Publicar no Vault" }).click();
+      await expect(title).toHaveValue("E2E Hello World");
+
+      const unique = `E2E Vault ${Date.now().toString(36)}`;
+      await title.fill(unique);
+      await dialog
+        .getByRole("button", { name: "Publicar", exact: true })
+        .click();
+      await expect(page.getByText("Publicado no Vault")).toBeVisible();
+
+      const listed = await page.request.get(
+        `/api/vault?q=${encodeURIComponent(unique)}`,
+      );
+      expect(listed.status()).toBe(200);
+      const listings: Array<{ title: string }> = await listed.json();
+      expect(listings.map((l) => l.title)).toEqual([unique]);
+    });
   });
 });

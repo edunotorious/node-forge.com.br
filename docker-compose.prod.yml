@@ -19,6 +19,9 @@ services:
 
   postgres:
     restart: unless-stopped
+    # The base file publishes 5432 for local dev. Docker-published ports
+    # bypass ufw, so in prod the DB must stay reachable only over app-net.
+    ports: !reset []
 
   backend:
     restart: unless-stopped

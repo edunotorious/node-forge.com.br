@@ -85,6 +85,7 @@ class PasswordResetToken(Base):
     """
 
     __tablename__ = "password_reset_tokens"
+    __table_args__ = (Index("idx_password_reset_tokens_user_used", "user_id", "used_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -230,7 +231,9 @@ class ExecutionJob(Base):
     # default in the migration ('[]'::jsonb). See 0003 for the bind-regex
     # analysis explaining why the Phase-5 trap does not apply to this
     # literal. Lista de {kind, source_node_id, data_b64}.
-    artifacts_json: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=lambda: [])
+    artifacts_json: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, default=lambda: [], server_default=text("'[]'::jsonb")
+    )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -258,10 +261,14 @@ class VaultListing(Base):
     """
 
     __tablename__ = "vault_listings"
+    __table_args__ = (
+        Index("idx_vault_listings_published_at", "published_at"),
+        Index("idx_vault_listings_author_id", "author_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     author_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     source_project_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
