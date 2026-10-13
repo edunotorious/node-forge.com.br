@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.auth.deps import get_current_user
+from src.auth.rate_limit import per_user_limit
 from src.config import get_settings
 from src.db.models import ExecutionJob, Project, ProjectFile, User
 from src.db.session import SessionLocal, get_session
@@ -22,6 +23,12 @@ from src.runner.schemas import JobResponse, TerminalRequest, TerminalResponse
 router = APIRouter(tags=["runner"])
 
 _settings = get_settings()
+
+# Every /run and /terminal call spawns a sandbox container, so they are
+# capped per account. Generous enough that clicking Run or typing in the
+# REPL never hits them in normal use; job polling stays unlimited.
+_run_limit = per_user_limit("run", "20/minute")
+_terminal_limit = per_user_limit("terminal", "60/minute")
 
 
 async def _get_owned_file(
@@ -95,7 +102,7 @@ async def _run_in_background(job_id: uuid.UUID, code: str) -> None:
 async def run_file(
     project_id: uuid.UUID,
     file_id: uuid.UUID,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(_run_limit)],
     session: Annotated[AsyncSession, Depends(get_session)],
     background: BackgroundTasks,
 ) -> ExecutionJob:
@@ -239,7 +246,7 @@ async def terminal(
     project_id: uuid.UUID,
     file_id: uuid.UUID,
     data: TerminalRequest,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(_terminal_limit)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TerminalResponse:
     """Stateless-per-call REPL scoped to a specific file. Each request
@@ -272,7 +279,10 @@ async def terminal(
         payload = res.json()
         return TerminalResponse(
             stdout=payload.get("stdout", ""),
-            stderr=payload.get("stderr", ""),
+            # The terminal has no separate error slot, so when the executor
+            # explains a failure only in error_message (busy, timeout) show
+            # it as stderr rather than an empty error.
+            stderr=payload.get("stderr") or payload.get("error_message") or "",
             status=payload.get("status", "error"),
         )
     except httpx.HTTPError as exc:

@@ -22,10 +22,16 @@ Why X-Forwarded-For:
 from __future__ import annotations
 
 import os
+from collections.abc import Awaitable, Callable
+from typing import Annotated
 
-from fastapi import Request
+from fastapi import Depends, HTTPException, Request, status
+from limits import parse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+
+from src.auth.deps import get_current_user
+from src.db.models import User
 
 
 def _client_ip(request: Request) -> str:
@@ -49,3 +55,27 @@ limiter = Limiter(
     # doesn't trip the per-IP buckets. Production never sets this.
     enabled=os.environ.get("RATE_LIMIT_ENABLED", "true").lower() != "false",
 )
+
+
+def per_user_limit(scope: str, limit: str) -> Callable[..., Awaitable[User]]:
+    """Dependency that authenticates the caller AND counts the request
+    against a per-user bucket. Use it in place of `get_current_user` on
+    endpoints that are expensive per call (each /run and /terminal spawns
+    a sandbox container).
+
+    Keyed by user id rather than IP: these endpoints are authenticated, so
+    the account is the natural unit, and it cannot be dodged by spoofing
+    X-Forwarded-For. Shares the limiter's storage (and its `enabled`
+    switch, so tests stay unaffected).
+    """
+    item = parse(limit)
+
+    async def dependency(user: Annotated[User, Depends(get_current_user)]) -> User:
+        if limiter.enabled and not limiter.limiter.hit(item, scope, str(user.id)):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many requests, slow down",
+            )
+        return user
+
+    return dependency

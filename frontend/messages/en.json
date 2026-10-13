@@ -243,7 +243,8 @@
       "inputAria": "Terminal command",
       "running": "running...",
       "clear": "Clear terminal",
-      "clearAria": "Clear terminal history"
+      "clearAria": "Clear terminal history",
+      "rateLimited": "Too many commands in a short time. Wait a minute and try again."
     },
     "imports": {
       "nodeImports": "Node Imports",
@@ -272,7 +273,8 @@
       "elapsed": "Time: {ms}ms"
     },
     "run": {
-      "failed": "Run failed"
+      "failed": "Run failed",
+      "rateLimited": "Too many runs in a short time. Wait a minute and try again."
     },
     "files": {
       "addAria": "Add new file",
