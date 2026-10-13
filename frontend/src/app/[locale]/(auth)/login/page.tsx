@@ -16,6 +16,16 @@ import { Link, useRouter } from "@/i18n/navigation";
 
 type Values = { email: string; password: string };
 
+// `?next=` is attacker-controllable (anyone can send a login link), so only
+// same-origin absolute paths are honored. `//host` and `/\host` are
+// protocol-relative in browsers and would redirect off-site.
+function safeNextPath(next: string | null): string {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
+    return "/projects";
+  }
+  return next;
+}
+
 export default function LoginPage() {
   // useSearchParams (inside LoginForm) opts the page into client-side
   // rendering at the static analysis stage — Next 16 requires a Suspense
@@ -60,8 +70,7 @@ function LoginForm() {
       return res.json();
     },
     onSuccess: () => {
-      const next = params.get("next") ?? "/projects";
-      router.push(next);
+      router.push(safeNextPath(params.get("next")));
       router.refresh();
     },
   });
