@@ -166,3 +166,78 @@ async def test_terminal_executor_down_returns_error_payload(client: AsyncClient,
     assert res.status_code == 200
     assert res.json()["status"] == "error"
     assert res.json()["stderr"].startswith("Executor call failed:")
+
+
+@pytest.fixture
+def limits_on():
+    """Re-enable the limiter (conftest disables it) with empty buckets."""
+    from src.auth import rate_limit as rl
+
+    rl.limiter.enabled = True
+    rl.limiter.reset()
+    try:
+        yield
+    finally:
+        rl.limiter.enabled = False
+        rl.limiter.reset()
+
+
+async def test_run_is_rate_limited_per_user(client: AsyncClient, executor, limits_on) -> None:
+    executor(lambda req: httpx.Response(200, json={"status": "succeeded"}))
+    await login_as(client, "a@example.com")
+    pid, fid = await _project_with_graph(client, BELL)
+    url = f"/projects/{pid}/files/{fid}/run"
+
+    for _ in range(20):
+        assert (await client.post(url)).status_code == 202
+    blocked = await client.post(url)
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"] == "Too many requests, slow down"
+
+    # The bucket is per account, not per IP: another user is unaffected.
+    await login_as(client, "b@example.com")
+    pid_b, fid_b = await _project_with_graph(client, BELL)
+    assert (await client.post(f"/projects/{pid_b}/files/{fid_b}/run")).status_code == 202
+
+
+async def test_job_polling_is_not_rate_limited(client: AsyncClient, executor, limits_on) -> None:
+    executor(lambda req: httpx.Response(200, json={"status": "succeeded"}))
+    await login_as(client, "a@example.com")
+    pid, fid = await _project_with_graph(client, BELL)
+    job = (await client.post(f"/projects/{pid}/files/{fid}/run")).json()
+    for _ in range(100):
+        assert (await client.get(f"/jobs/{job['id']}")).status_code == 200
+
+
+async def test_terminal_is_rate_limited_per_user(client: AsyncClient, executor, limits_on) -> None:
+    executor(lambda req: httpx.Response(200, json={"status": "succeeded", "stdout": ""}))
+    await login_as(client, "a@example.com")
+    pid, fid = await _project_with_graph(client, {})
+    url = f"/projects/{pid}/files/{fid}/terminal"
+
+    for _ in range(60):
+        assert (await client.post(url, json={"command": "1"})).status_code == 200
+    assert (await client.post(url, json={"command": "1"})).status_code == 429
+
+
+async def test_terminal_surfaces_executor_error_message(client: AsyncClient, executor) -> None:
+    executor(
+        lambda req: httpx.Response(
+            200,
+            json={
+                "status": "error",
+                "stdout": "",
+                "stderr": "",
+                "artifacts": [],
+                "error_message": "Executor is busy, try again in a few seconds",
+            },
+        )
+    )
+    await login_as(client, "a@example.com")
+    pid, fid = await _project_with_graph(client, {})
+    res = await client.post(f"/projects/{pid}/files/{fid}/terminal", json={"command": "1"})
+    assert res.json() == {
+        "stdout": "",
+        "stderr": "Executor is busy, try again in a few seconds",
+        "status": "error",
+    }

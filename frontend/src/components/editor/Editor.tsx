@@ -141,6 +141,10 @@ export function Editor({ initial }: EditorProps) {
         `/api/projects/${state.projectId}/files/${state.fileId}/run`,
         { method: "POST" },
       );
+      if (res.status === 429) {
+        toast.error(t("run.rateLimited"));
+        return;
+      }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail ?? `HTTP ${res.status}`);

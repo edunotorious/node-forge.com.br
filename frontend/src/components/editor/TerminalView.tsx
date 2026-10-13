@@ -59,6 +59,7 @@ export function TerminalView() {
           body: JSON.stringify({ history, command: cmd }),
         },
       );
+      if (res.status === 429) throw new Error(t("rateLimited"));
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail ?? `HTTP ${res.status}`);
