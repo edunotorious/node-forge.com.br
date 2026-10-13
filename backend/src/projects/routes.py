@@ -123,7 +123,9 @@ async def update_project(
     if data.description is not None:
         project.description = data.description
     await session.commit()
-    await session.refresh(project, attribute_names=["files"])
+    # `updated_at` is expired by its ORM-side onupdate; reload it here or the
+    # response serializer lazy-loads it outside the async context (500).
+    await session.refresh(project, attribute_names=["files", "updated_at"])
     return project
 
 
