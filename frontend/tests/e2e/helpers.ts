@@ -1,5 +1,10 @@
 import type { Page } from "@playwright/test";
 
+/** Session of the shared e2e user, written by auth.setup.ts. */
+export const AUTH_STATE_FILE = "playwright/.auth/user.json";
+/** Credentials of the same user, for specs that need to log in again. */
+export const AUTH_USER_FILE = "playwright/.auth/credentials.json";
+
 /**
  * Generate a unique-per-run test user. Timestamp + random suffix keeps
  * conflicts impossible even when tests retry. Domain `example.com` is

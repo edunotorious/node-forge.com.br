@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { bellStateGraph, registerAndLogin } from "./helpers";
+import { bellStateGraph } from "./helpers";
 
 test.describe("Hello World — Bell state", () => {
   // Generous timeout: cold-start of the runner container + Aer simulator
@@ -9,8 +9,6 @@ test.describe("Hello World — Bell state", () => {
   test.setTimeout(120_000);
 
   test("end-to-end run produces 00/11 counts only", async ({ page }) => {
-    await registerAndLogin(page);
-
     // Create a fresh project via the BFF API (the page.request context
     // shares the cookies set by the browser, so this hits the same
     // authenticated surface).
@@ -64,9 +62,6 @@ test.describe("Hello World — Bell state", () => {
     expect(consoleText).not.toMatch(/'01':/);
     expect(consoleText).not.toMatch(/'10':/);
 
-    // Publishing rides on this test instead of its own spec: a separate
-    // spec would need a third /auth/register per run, and the 3/minute
-    // per-IP limit turns any retry into a 429.
     await test.step("publish the circuit to the Vault", async () => {
       await page.getByRole("button", { name: "Publicar no Vault" }).click();
 
