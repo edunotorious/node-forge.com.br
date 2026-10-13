@@ -52,3 +52,6 @@ frontend/playwright-report/
 frontend/test-results/
 frontend/blob-report/
 frontend/playwright/.cache/
+
+# Server-side deploy marker: commit the live frontend bundle was built from
+/.deploy-frontend-rev

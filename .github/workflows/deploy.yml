@@ -42,6 +42,7 @@ jobs:
       # service's directory; this keeps redeploys fast when only the
       # README or workflows move. The `git diff --quiet` returns 1 when
       # there are changes, which our shell treats as "rebuild this one".
+      # The frontend is tracked by commit instead (see .deploy-frontend-rev).
       - name: Pull + selective rebuild + up
         run: |
           ssh -i ~/.ssh/id_ed25519 ubuntu@137.131.143.114 'bash -se' <<'EOF'
@@ -52,47 +53,59 @@ jobs:
             git pull --ff-only origin main
             AFTER=$(git rev-parse HEAD)
 
-            if [ "$BEFORE" = "$AFTER" ]; then
-              echo ">>> no new commits; skipping rebuild"
-              exit 0
-            fi
-
             COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 
+            # Frontend bakes its bundle into a named volume and reuses it on
+            # start, so it is rebuilt by comparing the last commit that
+            # touched frontend/ with the one the live bundle was built from
+            # (recorded at the end of this script) instead of diffing
+            # BEFORE..AFTER. A missing or stale record (first run, or a
+            # deploy cancelled midway) still triggers the rebuild; the diff
+            # approach used to skip it and kept serving the old bundle.
+            FRONTEND_REV=$(git log -1 --format=%H -- frontend/)
+            BUILT_REV=$(cat .deploy-frontend-rev 2>/dev/null || true)
+
             REBUILD_TARGETS=()
-            git diff --quiet "$BEFORE" "$AFTER" -- frontend/ || REBUILD_TARGETS+=(frontend)
-            git diff --quiet "$BEFORE" "$AFTER" -- backend/  || REBUILD_TARGETS+=(backend)
-            git diff --quiet "$BEFORE" "$AFTER" -- executor/ || REBUILD_TARGETS+=(executor)
-            # Compose / Caddy changes warrant a full up.
-            if ! git diff --quiet "$BEFORE" "$AFTER" -- docker-compose.yml docker-compose.prod.yml Caddyfile; then
+            [ "$FRONTEND_REV" = "$BUILT_REV" ] || REBUILD_TARGETS+=(frontend)
+            COMPOSE_CHANGED=false
+            if [ "$BEFORE" != "$AFTER" ]; then
+              git diff --quiet "$BEFORE" "$AFTER" -- backend/  || REBUILD_TARGETS+=(backend)
+              git diff --quiet "$BEFORE" "$AFTER" -- executor/ || REBUILD_TARGETS+=(executor)
+              # Compose / Caddy changes warrant a full up.
+              git diff --quiet "$BEFORE" "$AFTER" -- docker-compose.yml docker-compose.prod.yml Caddyfile \
+                || COMPOSE_CHANGED=true
+            fi
+
+            if [ ${#REBUILD_TARGETS[@]} -eq 0 ] && [ "$COMPOSE_CHANGED" = false ]; then
+              echo ">>> nothing to rebuild"
+              exit 0
+            fi
+
+            REBUILD_FRONTEND=false
+            if printf '%s\n' "${REBUILD_TARGETS[@]}" | grep -qx frontend; then
+              REBUILD_FRONTEND=true
+              $COMPOSE down frontend
+              docker volume rm -f node-forge_frontend_next_cache || true
+            fi
+
+            if [ "$COMPOSE_CHANGED" = true ]; then
               echo ">>> compose or Caddyfile changed — applying full up"
               $COMPOSE up -d --build
-              exit 0
+            else
+              echo ">>> rebuilding: ${REBUILD_TARGETS[*]}"
+              $COMPOSE up -d --build "${REBUILD_TARGETS[@]}"
             fi
 
-            if [ ${#REBUILD_TARGETS[@]} -eq 0 ]; then
-              echo ">>> no service code changed; restarting nothing"
-              exit 0
+            if [ "$REBUILD_FRONTEND" = true ]; then
+              echo "$FRONTEND_REV" > .deploy-frontend-rev
             fi
-
-            echo ">>> rebuilding: ${REBUILD_TARGETS[*]}"
-
-            # Frontend bakes its bundle into a named volume; nuke the
-            # cache so `next build` runs cleanly on next start. Other
-            # services build from scratch each time anyway.
-            for svc in "${REBUILD_TARGETS[@]}"; do
-              if [ "$svc" = "frontend" ]; then
-                $COMPOSE down frontend
-                docker volume rm -f node-forge_frontend_next_cache || true
-              fi
-            done
-
-            $COMPOSE up -d --build "${REBUILD_TARGETS[@]}"
           EOF
 
       - name: Smoke test
         run: |
-          for i in $(seq 1 30); do
+          # Up to ~5 min: a frontend rebuild runs `next build` on container
+          # start, which takes a few minutes on the VM.
+          for i in $(seq 1 75); do
             code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://node-forge.com.br/api/health || true)
             if [ "$code" = "200" ]; then
               echo "smoke ok after ${i} attempts"; exit 0
