@@ -3,7 +3,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -47,15 +47,18 @@ export function PublishToVaultDialog({
 
   // When the project is renamed externally, refresh the seed title each
   // time the dialog opens — without clobbering a half-typed title from
-  // a previous attempt that's still open.
-  useEffect(() => {
+  // a previous attempt that's still open. Adjusted during render rather
+  // than in an effect (react.dev "adjusting state when a prop changes").
+  const [seedKey, setSeedKey] = useState({ open, projectName });
+  if (seedKey.open !== open || seedKey.projectName !== projectName) {
+    setSeedKey({ open, projectName });
     if (open) {
       setTitle(projectName);
       setDescription("");
       setTags([]);
       setTagDraft("");
     }
-  }, [open, projectName]);
+  }
 
   const publish = useMutation({
     mutationFn: async () => {
