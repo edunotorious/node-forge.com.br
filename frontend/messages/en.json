@@ -386,8 +386,8 @@
   },
   "vault": {
     "title": "Node Vault",
-    "subtitle": "An open library of circuits published by the community. Clone, study, remix.",
-    "searchPlaceholder": "Search by title or description...",
+    "subtitle": "A library of circuits published by the community. Clone free projects to study and remix, or find paid, ready-to-use projects.",
+    "searchPlaceholder": "Search projects by title or description...",
     "by": "by",
     "cloneToProjects": "Clone to my projects",
     "cloning": "Cloning...",
@@ -397,11 +397,14 @@
     "unpublishConfirm": "Unpublish this listing? Anyone who already cloned keeps their copy, but the listing disappears from the Vault.",
     "backToList": "Back to Vault",
     "deletedAuthor": "[deleted author]",
+    "anonymousAuthor": "Community member",
     "sort": {
       "label": "Sort",
       "recent": "Recent",
       "popular": "Popular",
-      "liked": "Most liked"
+      "liked": "Most liked",
+      "price_asc": "Lowest price",
+      "price_desc": "Highest price"
     },
     "empty": {
       "brandNew": "The Vault is empty.",
@@ -439,7 +442,9 @@
       "unpublishSuccess": "Listing removed",
       "unpublishFailed": "Unpublish failed",
       "commentFailed": "Comment failed",
-      "commentDeleteFailed": "Delete failed"
+      "commentDeleteFailed": "Delete failed",
+      "priceSaved": "Price updated",
+      "priceFailed": "Failed to update the price"
     },
     "publish": {
       "title": "Publish to Node Vault",
@@ -456,7 +461,53 @@
       "toast": {
         "success": "Published to the Vault",
         "failed": "Publish failed"
+      },
+      "priceField": "Price",
+      "pricePlaceholder": "e.g. 29.90",
+      "priceHelp": "Between R$ 1.00 and R$ 10,000.00. Until payments arrive, paid projects show only a preview in the Vault.",
+      "freeHelp": "Anyone can view and clone free projects.",
+      "priceInvalid": "Enter an amount between R$ 1.00 and R$ 10,000.00."
+    },
+    "featured": "Featured",
+    "allProjects": "All projects",
+    "results": "Results",
+    "loadMore": "Load more",
+    "loadingMore": "Loading...",
+    "hero": {
+      "badge": "Quantum circuit marketplace",
+      "cta": "Publish my project"
+    },
+    "categories": {
+      "title": "Categories",
+      "all": "All"
+    },
+    "price": {
+      "free": "Free",
+      "paid": "Paid",
+      "filterLabel": "Price",
+      "filter": {
+        "all": "All",
+        "free": "Free",
+        "paid": "Paid"
       }
+    },
+    "card": {
+      "qubits": "{count, plural, =0 {no qubits} one {# qubit} other {# qubits}}",
+      "nodes": "{count, plural, one {# node} other {# nodes}}",
+      "clones": "Clones",
+      "likes": "Likes",
+      "comments": "Comments"
+    },
+    "purchase": {
+      "priceLabel": "Price",
+      "buySoon": "Buy · coming soon",
+      "paymentsSoon": "Payments are not available yet. Soon you will be able to buy this project here.",
+      "files": "Files",
+      "lockedTitle": "Preview of a paid project",
+      "lockedBody": "The node sequence, parameters and connections become available after purchase.",
+      "ownerNote": "Your project is paid: other people only see the preview and cannot clone it.",
+      "editPrice": "Change price",
+      "savePrice": "Save price"
     }
   }
 }

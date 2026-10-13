@@ -5,6 +5,7 @@ import { getLocale } from "next-intl/server";
 import { cache } from "react";
 
 import { redirect } from "@/i18n/navigation";
+import type { VaultPriceFilter, VaultSort } from "@/lib/vault";
 
 const BACKEND = process.env.BACKEND_INTERNAL_URL ?? "http://backend:8000";
 const TOKEN = process.env.INTERNAL_API_TOKEN ?? "";
@@ -115,6 +116,17 @@ export interface VaultListingSummary {
   like_count: number;
   comment_count: number;
   liked_by_me: boolean | null;
+  // Integer cents of `currency`; 0 means free.
+  price_cents: number;
+  currency: string;
+  file_count: number;
+  node_count: number;
+  num_qubits: number;
+}
+
+export interface VaultTagCount {
+  tag: string;
+  count: number;
 }
 
 export interface VaultFileSnapshot {
@@ -130,6 +142,9 @@ export interface VaultFileSnapshot {
 
 export interface VaultListingDetail extends VaultListingSummary {
   files: VaultFileSnapshot[];
+  // Paid listing seen by someone other than its author: each file's
+  // graph_json only carries `config`.
+  locked: boolean;
 }
 
 export async function listVaultListings(
@@ -137,7 +152,8 @@ export async function listVaultListings(
     q?: string;
     tag?: string;
     author?: string;
-    sort?: "recent" | "popular" | "liked";
+    sort?: VaultSort;
+    price?: VaultPriceFilter;
     limit?: number;
     offset?: number;
   } = {},
@@ -147,11 +163,18 @@ export async function listVaultListings(
   if (params.tag) qs.set("tag", params.tag);
   if (params.author) qs.set("author", params.author);
   if (params.sort) qs.set("sort", params.sort);
+  if (params.price && params.price !== "all") qs.set("price", params.price);
   if (params.limit) qs.set("limit", String(params.limit));
   if (params.offset) qs.set("offset", String(params.offset));
   const res = await backendFetch(
     `/vault${qs.toString() ? `?${qs.toString()}` : ""}`,
   );
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function listVaultTags(limit = 12): Promise<VaultTagCount[]> {
+  const res = await backendFetch(`/vault/tags?limit=${limit}`);
   if (!res.ok) return [];
   return res.json();
 }

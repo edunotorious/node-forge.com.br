@@ -2,20 +2,34 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Atom,
   Copy,
+  FileText,
   Heart,
+  Layers,
+  Lock,
   MessageCircle,
   RefreshCw,
+  ShoppingCart,
   Sparkles,
+  Tag,
   Trash2,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AuthorAvatar,
+  authorLabel,
+  ListingCover,
+  PriceModeToggle,
+} from "@/components/vault/listing-visuals";
 import { Link, useRouter } from "@/i18n/navigation";
+import { formatPrice, isValidPaidPrice, parsePriceInput } from "@/lib/price";
 import type {
   VaultFileSnapshot,
   VaultListingDetail,
@@ -33,8 +47,10 @@ interface VaultDetailProps {
 
 export function VaultDetail({ listing, viewer }: VaultDetailProps) {
   const t = useTranslations("vault");
+  const locale = useLocale();
   const router = useRouter();
   const qc = useQueryClient();
+  const isPaid = listing.price_cents > 0;
   const [liked, setLiked] = useState<boolean>(!!listing.liked_by_me);
   const [likeCount, setLikeCount] = useState<number>(listing.like_count);
   const [activeFile, setActiveFile] = useState<VaultFileSnapshot>(
@@ -71,6 +87,7 @@ export function VaultDetail({ listing, viewer }: VaultDetailProps) {
         method: "POST",
       });
       if (res.status === 401) throw new Error("not_authenticated");
+      if (res.status === 402) throw new Error("payment_required");
       if (!res.ok) throw new Error(`clone ${res.status}`);
       return (await res.json()) as { project_id: string };
     },
@@ -82,6 +99,8 @@ export function VaultDetail({ listing, viewer }: VaultDetailProps) {
       if (err instanceof Error && err.message === "not_authenticated") {
         toast.error(t("toast.signInToClone"));
         router.push("/login");
+      } else if (err instanceof Error && err.message === "payment_required") {
+        toast.error(t("purchase.paymentsSoon"));
       } else {
         toast.error(t("toast.cloneFailed"));
       }
@@ -123,9 +142,7 @@ export function VaultDetail({ listing, viewer }: VaultDetailProps) {
   });
 
   const authorName =
-    listing.author?.display_name ??
-    listing.author?.username ??
-    t("deletedAuthor");
+    authorLabel(listing.author, t);
   const sortedFiles = listing.files
     .toSorted((a, b) => a.position - b.position);
 
@@ -138,13 +155,32 @@ export function VaultDetail({ listing, viewer }: VaultDetailProps) {
         ← {t("backToList")}
       </Link>
 
-      <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex-1">
+      <header className="mb-8 grid gap-6 lg:grid-cols-[1fr_20rem] lg:items-start">
+        <div className="min-w-0">
+          <ListingCover
+            slug={listing.slug}
+            numQubits={listing.num_qubits}
+            nodeCount={listing.node_count}
+            className="mb-6 aspect-[16/6] rounded-2xl"
+          />
           <h1 className="font-heading text-3xl font-black sm:text-4xl">
             {listing.title}
           </h1>
+          <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <AuthorAvatar name={authorName} />
+            <span>{t("by")}</span>
+            <span className="font-medium text-foreground">{authorName}</span>
+            <span>·</span>
+            <span>
+              {new Date(listing.published_at).toLocaleDateString(locale, {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+              })}
+            </span>
+          </div>
           {listing.description ? (
-            <p className="mt-3 max-w-3xl text-base text-muted-foreground">
+            <p className="mt-4 max-w-3xl whitespace-pre-line text-base text-muted-foreground">
               {listing.description}
             </p>
           ) : null}
@@ -161,53 +197,80 @@ export function VaultDetail({ listing, viewer }: VaultDetailProps) {
               ))}
             </div>
           ) : null}
-          <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-            <span>{t("by")}</span>
-            <span className="font-medium text-foreground">{authorName}</span>
-            <span>·</span>
-            <span>
-              {new Date(listing.published_at).toLocaleDateString(undefined, {
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-              })}
-            </span>
-          </div>
         </div>
 
-        <div className="flex shrink-0 flex-col items-stretch gap-2 lg:w-56">
-          <Button
-            size="lg"
-            onClick={() => clone.mutate()}
-            disabled={clone.isPending}
-            className="gap-2"
-          >
-            <Copy className="h-4 w-4" />
-            {clone.isPending ? t("cloning") : t("cloneToProjects")}
-          </Button>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => toggleLike.mutate(!liked)}
-              disabled={toggleLike.isPending}
-              className="flex-1 gap-2"
+        <aside className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm lg:sticky lg:top-6">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("purchase.priceLabel")}
+            </div>
+            <div
+              className={
+                "mt-1 font-heading text-3xl font-black " +
+                (isPaid ? "" : "text-emerald-600")
+              }
             >
-              <Heart
-                className={
-                  "h-4 w-4 " + (liked ? "fill-primary text-primary" : "")
-                }
-              />
-              {likeCount}
-            </Button>
-            <span className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-              <Sparkles className="h-4 w-4" />
-              {listing.clone_count}
-            </span>
+              {isPaid
+                ? formatPrice(listing.price_cents, listing.currency, locale)
+                : t("price.free")}
+            </div>
           </div>
 
+          {listing.locked ? (
+            <>
+              <Button size="lg" disabled className="gap-2">
+                <ShoppingCart className="h-4 w-4" />
+                {t("purchase.buySoon")}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                {t("purchase.paymentsSoon")}
+              </p>
+            </>
+          ) : (
+            <Button
+              size="lg"
+              onClick={() => clone.mutate()}
+              disabled={clone.isPending}
+              className="gap-2"
+            >
+              <Copy className="h-4 w-4" />
+              {clone.isPending ? t("cloning") : t("cloneToProjects")}
+            </Button>
+          )}
+
+          <ul className="space-y-2 border-t border-border pt-4 text-sm">
+            <DetailFact icon={Atom} label={t("preview.qubits")} value={listing.num_qubits} />
+            <DetailFact icon={Layers} label={t("preview.gates")} value={listing.node_count} />
+            <DetailFact icon={FileText} label={t("purchase.files")} value={listing.file_count} />
+            <DetailFact icon={Sparkles} label={t("card.clones")} value={listing.clone_count} />
+          </ul>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toggleLike.mutate(!liked)}
+            disabled={toggleLike.isPending}
+            className="gap-2"
+          >
+            <Heart
+              className={
+                "h-4 w-4 " + (liked ? "fill-primary text-primary" : "")
+              }
+            />
+            {likeCount}
+          </Button>
+
           {viewer?.isAuthor ? (
-            <div className="mt-2 flex flex-col gap-2 border-t border-border pt-3">
+            <div className="flex flex-col gap-2 border-t border-border pt-4">
+              {isPaid ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("purchase.ownerNote")}
+                </p>
+              ) : null}
+              <PriceEditor
+                listingId={listing.id}
+                priceCents={listing.price_cents}
+              />
               <Button
                 variant="outline"
                 size="sm"
@@ -234,7 +297,7 @@ export function VaultDetail({ listing, viewer }: VaultDetailProps) {
               </Button>
             </div>
           ) : null}
-        </div>
+        </aside>
       </header>
 
       {sortedFiles.length > 1 ? (
@@ -257,14 +320,130 @@ export function VaultDetail({ listing, viewer }: VaultDetailProps) {
         </div>
       ) : null}
 
-      <FilePreview file={activeFile} />
+      <FilePreview file={activeFile} locked={listing.locked} />
 
       <CommentsSection listingId={listing.id} viewer={viewer} />
     </div>
   );
 }
 
-function FilePreview({ file }: { file: VaultFileSnapshot }) {
+function DetailFact({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+}) {
+  return (
+    <li className="flex items-center justify-between">
+      <span className="flex items-center gap-2 text-muted-foreground">
+        <Icon className="h-4 w-4" />
+        {label}
+      </span>
+      <span className="font-semibold">{value}</span>
+    </li>
+  );
+}
+
+// Author-only: switch the listing between free and paid, or reprice it.
+function PriceEditor({
+  listingId,
+  priceCents,
+}: {
+  listingId: string;
+  priceCents: number;
+}) {
+  const t = useTranslations("vault");
+  const locale = useLocale();
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [paid, setPaid] = useState(priceCents > 0);
+  const [draft, setDraft] = useState(
+    priceCents > 0
+      ? (priceCents / 100).toLocaleString(locale, { minimumFractionDigits: 2 })
+      : "",
+  );
+  const parsed = paid ? parsePriceInput(draft) : 0;
+  const valid = !paid || isValidPaidPrice(parsed);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/vault/${listingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ price_cents: parsed }),
+      });
+      if (!res.ok) throw new Error(`price ${res.status}`);
+    },
+    onSuccess: () => {
+      toast.success(t("toast.priceSaved"));
+      setEditing(false);
+      router.refresh();
+    },
+    onError: () => toast.error(t("toast.priceFailed")),
+  });
+
+  if (!editing) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setEditing(true)}
+        className="gap-2"
+      >
+        <Tag className="h-3.5 w-3.5" />
+        {t("purchase.editPrice")}
+      </Button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg bg-muted/40 p-3">
+      <PriceModeToggle paid={paid} onChange={setPaid} />
+      {paid ? (
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          inputMode="decimal"
+          placeholder={t("publish.pricePlaceholder")}
+          aria-label={t("publish.priceField")}
+          aria-invalid={!valid}
+        />
+      ) : null}
+      {paid && draft && !valid ? (
+        <p className="text-xs text-destructive">{t("publish.priceInvalid")}</p>
+      ) : null}
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          className="flex-1"
+          onClick={() => save.mutate()}
+          disabled={!valid || save.isPending}
+        >
+          {t("purchase.savePrice")}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setEditing(false)}
+          disabled={save.isPending}
+        >
+          {t("publish.cancel")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function FilePreview({
+  file,
+  locked,
+}: {
+  file: VaultFileSnapshot;
+  locked: boolean;
+}) {
   const t = useTranslations("vault");
   const config = file.graph_json.config ?? {};
   const nodes = file.graph_json.nodes ?? [];
@@ -276,10 +455,22 @@ function FilePreview({ file }: { file: VaultFileSnapshot }) {
         <Stat label={t("preview.qubits")} value={config.num_qubits ?? 0} />
         <Stat label={t("preview.classical")} value={config.num_classical ?? 0} />
         <Stat label={t("preview.shots")} value={config.shots ?? 0} />
-        <Stat label={t("preview.gates")} value={nodes.length} />
+        {locked ? null : (
+          <Stat label={t("preview.gates")} value={nodes.length} />
+        )}
       </div>
 
-      {nodes.length === 0 ? (
+      {locked ? (
+        <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted/30 px-6 py-10 text-center">
+          <Lock className="h-6 w-6 text-muted-foreground" />
+          <p className="font-heading text-lg font-bold">
+            {t("purchase.lockedTitle")}
+          </p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            {t("purchase.lockedBody")}
+          </p>
+        </div>
+      ) : nodes.length === 0 ? (
         <p className="rounded-lg bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           {t("preview.empty")}
         </p>
@@ -469,9 +660,7 @@ function CommentsSection({
           {list.map((c) => {
             const isMine = viewer?.id === c.author?.id;
             const name =
-              c.author?.display_name ??
-              c.author?.username ??
-              t("deletedAuthor");
+              authorLabel(c.author, t);
             return (
               <li
                 key={c.id}
