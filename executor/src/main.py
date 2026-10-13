@@ -31,6 +31,7 @@ import base64
 import io
 import os
 import tarfile
+import threading
 from typing import Annotated
 
 import docker
@@ -58,16 +59,25 @@ RUNNER_CPUS = float(os.environ.get("RUNNER_CPUS", "1.0"))
 # daemon rejects container creation with 400 Bad Request.
 RUNNER_RUNTIME = os.environ.get("RUNNER_RUNTIME", "runc")
 RUNNER_WORKDIR = "/work"
+# How many runner containers may exist at once. Each one can take
+# RUNNER_MEM_LIMIT + RUNNER_CPUS, so size this to the host. A request that
+# finds every slot taken waits up to RUN_SLOT_WAIT_SECONDS, then gets a
+# "busy" error instead of queueing past the backend's own HTTP timeout.
+MAX_CONCURRENT_RUNS = int(os.environ.get("MAX_CONCURRENT_RUNS", "2"))
+RUN_SLOT_WAIT_SECONDS = float(os.environ.get("RUN_SLOT_WAIT_SECONDS", "5"))
 
 app = FastAPI(title="Node-Forge Executor", version="0.2.0")
 _docker_client: docker.DockerClient | None = None
+_docker_client_lock = threading.Lock()
+_run_slots = threading.BoundedSemaphore(MAX_CONCURRENT_RUNS)
 
 
 def _client() -> docker.DockerClient:
     global _docker_client
-    if _docker_client is None:
-        _docker_client = docker.from_env()
-    return _docker_client
+    with _docker_client_lock:
+        if _docker_client is None:
+            _docker_client = docker.from_env()
+        return _docker_client
 
 
 class RunRequest(BaseModel):
@@ -159,8 +169,12 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+# Plain `def`, not `async def`: the docker SDK is blocking (wait() alone
+# can take TIMEOUT_SECONDS), so FastAPI must run this in its threadpool.
+# As a coroutine it froze the event loop, which serialized every run and
+# made /health hang while one was in flight.
 @app.post("/run", response_model=RunResponse)
-async def run(
+def run(
     req: RunRequest,
     x_internal_api_token: Annotated[str | None, Header()] = None,
 ) -> RunResponse:
@@ -170,6 +184,21 @@ async def run(
             detail="Invalid internal API token",
         )
 
+    if not _run_slots.acquire(timeout=RUN_SLOT_WAIT_SECONDS):
+        return RunResponse(
+            status="error",
+            stdout="",
+            stderr="",
+            artifacts=[],
+            error_message="Executor is busy, try again in a few seconds",
+        )
+    try:
+        return _run_in_sandbox(req.code)
+    finally:
+        _run_slots.release()
+
+
+def _run_in_sandbox(code: str) -> RunResponse:
     client = _client()
 
     try:
@@ -210,7 +239,7 @@ async def run(
         ) from exc
 
     try:
-        container.put_archive(RUNNER_WORKDIR, _make_script_tar(req.code).read())
+        container.put_archive(RUNNER_WORKDIR, _make_script_tar(code).read())
         container.start()
         try:
             result = container.wait(timeout=TIMEOUT_SECONDS)
