@@ -21,7 +21,7 @@ jobs:
   deploy:
     name: SSH deploy to Oracle VM
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     # Skip if the upstream CI run failed (workflow_run fires on every
     # completion, success or not). Always run for manual dispatches.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
@@ -58,12 +58,12 @@ jobs:
             # Frontend bakes its bundle into a named volume and reuses it on
             # start, so it is rebuilt by comparing the last commit that
             # touched frontend/ with the one the live bundle was built from
-            # (recorded at the end of this script) instead of diffing
-            # BEFORE..AFTER. A missing or stale record (first run, or a
-            # deploy cancelled midway) still triggers the rebuild; the diff
-            # approach used to skip it and kept serving the old bundle.
+            # (recorded at the end of this script, only once the new bundle
+            # actually serves) instead of diffing BEFORE..AFTER. A missing
+            # or stale record (first run, a cancelled or failed deploy)
+            # still triggers the rebuild.
             FRONTEND_REV=$(git log -1 --format=%H -- frontend/)
-            BUILT_REV=$(cat .deploy-frontend-rev 2>/dev/null || true)
+            BUILT_REV=$(cat .deploy-frontend-built 2>/dev/null || true)
 
             REBUILD_TARGETS=()
             [ "$FRONTEND_REV" = "$BUILT_REV" ] || REBUILD_TARGETS+=(frontend)
@@ -85,7 +85,11 @@ jobs:
             if printf '%s\n' "${REBUILD_TARGETS[@]}" | grep -qx frontend; then
               REBUILD_FRONTEND=true
               $COMPOSE down frontend
-              docker volume rm -f node-forge_frontend_next_cache || true
+              # node_modules is a named volume too, and Docker only seeds a
+              # named volume from the image when it is first created: without
+              # dropping it, a newly added dependency never reaches the
+              # container and `next build` fails (vitest, 2026-10-13).
+              docker volume rm -f node-forge_frontend_next_cache node-forge_frontend_node_modules || true
             fi
 
             if [ "$COMPOSE_CHANGED" = true ]; then
@@ -97,7 +101,21 @@ jobs:
             fi
 
             if [ "$REBUILD_FRONTEND" = true ]; then
-              echo "$FRONTEND_REV" > .deploy-frontend-rev
+              # `next build` runs on container start; wait for the new bundle
+              # to serve before recording it, so a failed build is retried
+              # by the next deploy instead of being marked as live.
+              echo ">>> waiting for the frontend build"
+              for i in $(seq 1 120); do
+                if $COMPOSE exec -T frontend wget -q -O /dev/null http://localhost:3000/login 2>/dev/null; then
+                  echo "$FRONTEND_REV" > .deploy-frontend-built
+                  echo ">>> frontend serving after ~$((i * 5))s"
+                  exit 0
+                fi
+                sleep 5
+              done
+              echo ">>> frontend did not come up in 10 min"
+              $COMPOSE logs --tail=80 frontend
+              exit 1
             fi
           EOF
 
