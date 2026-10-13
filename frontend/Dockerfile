@@ -22,3 +22,17 @@ EXPOSE 3000
 
 # `next dev` includes hot reload and Turbopack by default in Next 16.
 CMD ["pnpm", "dev"]
+
+# Production: the bundle is compiled while the image builds, so a deploy
+# builds the new image next to the running container and only swaps it
+# once the build succeeded — no downtime while `next build` runs, and a
+# failed build leaves the live site untouched. Dev deps stay installed
+# (the build needs them; `next start` ignores them).
+FROM base AS prod
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+
+RUN pnpm build
+
+CMD ["pnpm", "start"]

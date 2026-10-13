@@ -90,6 +90,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # Dev server stage; docker-compose.prod.yml switches to `prod`.
+      target: base
     env_file: .env
     volumes:
       # Bind-mount the project for hot reload. Named volumes shadow the
