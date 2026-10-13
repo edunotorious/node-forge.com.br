@@ -41,6 +41,7 @@ export function Canvas() {
   const onEdgesChange = useEditor((s) => s.onEdgesChange);
   const onConnect = useEditor((s) => s.onConnect);
   const addNode = useEditor((s) => s.addNode);
+  const removeNode = useEditor((s) => s.deleteNode);
   const setSelectedNode = useEditor((s) => s.setSelectedNode);
 
   const { screenToFlowPosition } = useReactFlow();
@@ -142,9 +143,10 @@ export function Canvas() {
   );
 
   function deleteNode(id: string) {
-    // applyNodeChanges in the store handles the "remove" change type and
-    // flips saveStatus to dirty so the autosave persists the deletion.
-    onNodesChange([{ type: "remove", id }]);
+    // The store action drops the node's edges too (a bare "remove" change
+    // left them dangling in graph_json) and flips saveStatus to dirty so
+    // the autosave persists the deletion.
+    removeNode(id);
     setNodeMenu(null);
   }
 

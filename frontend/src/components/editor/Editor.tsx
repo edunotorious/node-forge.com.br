@@ -41,11 +41,54 @@ interface EditorProps {
 
 const AUTOSAVE_DEBOUNCE_MS = 1000;
 
+type EditorState = ReturnType<typeof useEditor.getState>;
+
+// PATCH the project name and the active file's graph. Takes the state as an
+// argument and never touches the store, so it can also run after the editor
+// unmounts (the store is reset by then). `keepalive` lets the request
+// outlive a closing tab; browsers cap such bodies at 64 KB.
+function persist(state: EditorState, keepalive = false): Promise<Response[]> {
+  // Project name lives on `projects`; the graph lives on the active
+  // `project_files` row. Fire both in parallel — they target different
+  // endpoints and there is no ordering requirement.
+  return Promise.all([
+    fetch(`/api/projects/${state.projectId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: state.projectName }),
+      keepalive,
+    }),
+    fetch(`/api/projects/${state.projectId}/files/${state.fileId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        graph_json: {
+          nodes: state.nodes,
+          edges: state.edges,
+          config: state.config,
+          variables: state.variables,
+          functions: state.functions,
+          classes: state.classes,
+        },
+      }),
+      keepalive,
+    }),
+  ]);
+}
+
+function hasUnsavedEdits(state: EditorState): boolean {
+  return state.saveStatus === "dirty" && !!state.projectId && !!state.fileId;
+}
+
 export function Editor({ initial }: EditorProps) {
   const t = useTranslations("editor");
   const hydrate = useEditor((s) => s.hydrate);
   const reset = useEditor((s) => s.reset);
   const setSaveStatus = useEditor((s) => s.setSaveStatus);
+
+  // Saves run one at a time, each reading the latest state when it starts,
+  // so a slow PATCH can never land after (and overwrite) a newer one.
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
 
   // Hydrate the store from the server-rendered project, then reset on unmount
   // so leftover state cannot leak into the next project the user opens.
@@ -64,57 +107,60 @@ export function Editor({ initial }: EditorProps) {
       classes: initial.graph.classes,
     });
     return () => {
+      // Leaving the editor (back to projects, another page) used to drop
+      // edits still waiting on the autosave debounce.
+      const state = useEditor.getState();
+      if (hasUnsavedEdits(state)) {
+        saveChainRef.current
+          .then(() => persist(state))
+          .catch((err) => console.error("save on leave failed", err));
+      }
       reset();
     };
   }, [initial, hydrate, reset]);
 
-  const save = useCallback(async () => {
+  // Closing or reloading the tab: best-effort save that survives the unload.
+  useEffect(() => {
+    function onPageHide() {
+      const state = useEditor.getState();
+      if (hasUnsavedEdits(state)) persist(state, true).catch(() => {});
+    }
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, []);
+
+  const saveOnce = useCallback(async () => {
     const state = useEditor.getState();
     if (!state.projectId || !state.fileId) return;
     setSaveStatus("saving");
     try {
-      // Project name lives on `projects`; the graph lives on the active
-      // `project_files` row. Fire both in parallel — they target different
-      // endpoints and there is no ordering requirement.
-      const [projRes, fileRes] = await Promise.all([
-        fetch(`/api/projects/${state.projectId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: state.projectName }),
-        }),
-        fetch(
-          `/api/projects/${state.projectId}/files/${state.fileId}`,
-          {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              graph_json: {
-                nodes: state.nodes,
-                edges: state.edges,
-                config: state.config,
-                variables: state.variables,
-                functions: state.functions,
-                classes: state.classes,
-              },
-            }),
-          },
-        ),
-      ]);
+      const [projRes, fileRes] = await persist(state);
       if (!projRes.ok) throw new Error(`project PATCH HTTP ${projRes.status}`);
       if (!fileRes.ok) throw new Error(`file PATCH HTTP ${fileRes.status}`);
-      setSaveStatus("saved", new Date());
+      // An edit made while the request was in flight flipped the status
+      // back to "dirty" and scheduled its own save. Claiming "saved" here
+      // would cancel that save and silently drop the edit.
+      if (useEditor.getState().saveStatus === "saving") {
+        setSaveStatus("saved", new Date());
+      }
     } catch (err) {
       console.error("autosave failed", err);
-      setSaveStatus("error");
+      if (useEditor.getState().saveStatus === "saving") setSaveStatus("error");
       toast.error(t("autosaveFailed"));
     }
   }, [setSaveStatus, t]);
 
-  // Force-save before file switch / explicit Save click — skips the debounce
-  // if a save is not already pending.
+  const save = useCallback(() => {
+    const next = saveChainRef.current.then(saveOnce);
+    saveChainRef.current = next;
+    return next;
+  }, [saveOnce]);
+
+  // Force-save before file switch / run / publish / explicit Save click —
+  // skips the debounce, and waits for a save already in flight.
   const flushSave = useCallback(async () => {
-    const status = useEditor.getState().saveStatus;
-    if (status === "dirty") await save();
+    if (useEditor.getState().saveStatus === "dirty") await save();
+    else await saveChainRef.current;
   }, [save]);
 
   const setLastJob = useEditor((s) => s.setLastJob);
@@ -129,10 +175,19 @@ export function Editor({ initial }: EditorProps) {
   //     each tick so ConsoleView re-renders progressively.
   //
   // Polling caps at MAX_POLL_MS of wall time as a defence against a stuck
-  // job — the executor's own timeout normally lands well before this.
+  // job — the executor's own timeout normally lands well before this. It
+  // also stops when the editor unmounts or the user switches files, so a
+  // finished job never lands in another file's (or project's) console.
+  const runAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => runAbortRef.current?.abort(), []);
+
   const runFile = useCallback(async () => {
     const state = useEditor.getState();
     if (!state.projectId || !state.fileId || state.isRunning) return;
+    const abort = new AbortController();
+    runAbortRef.current = abort;
+    const stillCurrent = () =>
+      !abort.signal.aborted && useEditor.getState().fileId === state.fileId;
     setIsRunning(true);
     setBottomTab("console");
     try {
@@ -150,6 +205,7 @@ export function Editor({ initial }: EditorProps) {
         throw new Error(body.detail ?? `HTTP ${res.status}`);
       }
       let job: ExecutionJob = await res.json();
+      if (!stillCurrent()) return;
       setLastJob(job);
 
       const startedAt = Date.now();
@@ -160,18 +216,25 @@ export function Editor({ initial }: EditorProps) {
         Date.now() - startedAt < MAX_POLL_MS
       ) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        const pollRes = await fetch(`/api/jobs/${job.id}`);
+        if (!stillCurrent()) return;
+        const pollRes = await fetch(`/api/jobs/${job.id}`, {
+          signal: abort.signal,
+        });
         if (!pollRes.ok) {
           throw new Error(`poll HTTP ${pollRes.status}`);
         }
         job = await pollRes.json();
+        if (!stillCurrent()) return;
         setLastJob(job);
       }
     } catch (err) {
+      if (abort.signal.aborted) return;
       toast.error(t("run.failed"));
       console.error("run failed", err);
     } finally {
-      setIsRunning(false);
+      // After an unmount the store may already belong to another project;
+      // only the run that still owns it clears the flag.
+      if (!abort.signal.aborted) setIsRunning(false);
     }
   }, [flushSave, setIsRunning, setLastJob, setBottomTab, t]);
 
@@ -226,7 +289,7 @@ export function Editor({ initial }: EditorProps) {
   return (
     <ReactFlowProvider>
       <div className="flex h-[calc(100vh-3rem)] flex-col">
-        <EditorTopBar onSaveNow={() => void save()} />
+        <EditorTopBar onSaveNow={() => void save()} flushSave={flushSave} />
         <FileTabsBar flushSave={flushSave} onRun={() => void runFile()} />
         <div className="flex flex-1 overflow-hidden">
           <LeftPanel />

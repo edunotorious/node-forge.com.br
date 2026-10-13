@@ -41,6 +41,10 @@ interface Snapshot {
 // memory. 50 steps is more than enough for typical user undo expectations.
 const MAX_HISTORY = 50;
 
+// Consecutive edits to the same field within this window collapse into a
+// single undo step, so typing a name is one Ctrl+Z, not one per keystroke.
+const HISTORY_GROUP_MS = 1000;
+
 interface State {
   projectId: string | null;
   projectName: string;
@@ -65,6 +69,12 @@ interface State {
   // to roll back to; future[0] is the next thing to redo.
   past: Snapshot[];
   future: Snapshot[];
+  // Last grouped edit (see HISTORY_GROUP_MS); null after any other change.
+  historyGroup: { key: string; at: number } | null;
+  // State captured when a node drag starts, pushed to `past` when it ends.
+  // React Flow applies intermediate positions while dragging, so the state
+  // at drag-end no longer holds the original position.
+  dragOrigin: Snapshot | null;
 }
 
 interface Actions {
@@ -100,6 +110,8 @@ interface Actions {
   onConnect: (conn: Connection) => void;
   addNode: (node: Node) => void;
   updateNodeData: (nodeId: string, patch: Record<string, unknown>) => void;
+  // Remove a node plus every edge touching it, as one undo step.
+  deleteNode: (nodeId: string) => void;
   setSelectedNode: (id: string | null) => void;
   setConfig: (patch: Partial<GraphConfig>) => void;
   setProjectName: (name: string) => void;
@@ -147,6 +159,8 @@ const INITIAL: State = {
   isRunning: false,
   past: [],
   future: [],
+  historyGroup: null,
+  dragOrigin: null,
 };
 
 function captureSnapshot(s: State): Snapshot {
@@ -163,12 +177,32 @@ function captureSnapshot(s: State): Snapshot {
 
 // Patch returned by every mutating action to snapshot the current state
 // onto `past` and invalidate `future`. The cap-via-slice keeps the
-// history bounded.
-function _pushHistory(s: State): Pick<State, "past" | "future"> {
+// history bounded. Passing a `group` key merges the edit into the previous
+// step when it continues the same field within HISTORY_GROUP_MS.
+function _pushHistory(
+  s: State,
+  group?: string,
+): Pick<State, "past" | "future" | "historyGroup"> {
+  const now = Date.now();
+  if (
+    group &&
+    s.historyGroup?.key === group &&
+    now - s.historyGroup.at < HISTORY_GROUP_MS
+  ) {
+    return { past: s.past, future: [], historyGroup: { key: group, at: now } };
+  }
   return {
     past: [...s.past, captureSnapshot(s)].slice(-MAX_HISTORY),
     future: [],
+    historyGroup: group ? { key: group, at: now } : null,
   };
+}
+
+function isPositionChange(
+  c: NodeChange,
+  dragging: boolean,
+): boolean {
+  return c.type === "position" && c.dragging === dragging;
 }
 
 // User-driven changes flip status to "dirty" so the auto-save effect can tell
@@ -195,9 +229,14 @@ export const useEditor = create<State & Actions>((set) => ({
       lastSavedAt: null,
       past: [],
       future: [],
+      historyGroup: null,
+      dragOrigin: null,
     }),
   loadFile: (data) =>
     set({
+      // The console shows the last run of the active file; keeping the
+      // previous file's result here would show output this file never had.
+      lastJob: null,
       fileId: data.fileId,
       fileName: data.fileName,
       nodes: data.nodes,
@@ -211,16 +250,35 @@ export const useEditor = create<State & Actions>((set) => ({
       lastSavedAt: null,
       past: [],
       future: [],
+      historyGroup: null,
+      dragOrigin: null,
     }),
   setFiles: (files) => set({ files }),
   reset: () => set(INITIAL),
   onNodesChange: (changes) =>
     set((s) => {
       const meaningful = hasMeaningfulChange(changes);
+      const dragOrigin =
+        s.dragOrigin ??
+        (changes.some((c) => isPositionChange(c, true))
+          ? captureSnapshot(s)
+          : null);
+      const dragEnded = changes.some((c) => isPositionChange(c, false));
+      let history = {};
+      if (meaningful && dragEnded && dragOrigin) {
+        history = {
+          past: [...s.past, dragOrigin].slice(-MAX_HISTORY),
+          future: [],
+          historyGroup: null,
+        };
+      } else if (meaningful) {
+        history = _pushHistory(s);
+      }
       return {
-        ...(meaningful ? _pushHistory(s) : {}),
+        ...history,
         nodes: applyNodeChanges(changes, s.nodes),
         saveStatus: meaningful ? "dirty" : s.saveStatus,
+        dragOrigin: dragEnded ? null : dragOrigin,
       };
     }),
   onEdgesChange: (changes) =>
@@ -246,22 +304,30 @@ export const useEditor = create<State & Actions>((set) => ({
     })),
   updateNodeData: (id, patch) =>
     set((s) => ({
-      ..._pushHistory(s),
+      ..._pushHistory(s, `node:${id}`),
       nodes: s.nodes.map((n) =>
         n.id === id ? { ...n, data: { ...n.data, ...patch } } : n,
       ),
       saveStatus: "dirty",
     })),
+  deleteNode: (id) =>
+    set((s) => ({
+      ..._pushHistory(s),
+      nodes: s.nodes.filter((n) => n.id !== id),
+      edges: s.edges.filter((e) => e.source !== id && e.target !== id),
+      selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
+      saveStatus: "dirty",
+    })),
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setConfig: (patch) =>
     set((s) => ({
-      ..._pushHistory(s),
+      ..._pushHistory(s, "config"),
       config: { ...s.config, ...patch },
       saveStatus: "dirty",
     })),
   setProjectName: (name) =>
     set((s) => ({
-      ..._pushHistory(s),
+      ..._pushHistory(s, "projectName"),
       projectName: name,
       saveStatus: "dirty",
     })),
@@ -273,7 +339,7 @@ export const useEditor = create<State & Actions>((set) => ({
     })),
   updateVariable: (id, patch) =>
     set((s) => ({
-      ..._pushHistory(s),
+      ..._pushHistory(s, `variable:${id}`),
       variables: s.variables.map((v) =>
         v.id === id ? { ...v, ...patch } : v,
       ),
@@ -293,7 +359,7 @@ export const useEditor = create<State & Actions>((set) => ({
     })),
   updateFunction: (id, patch) =>
     set((s) => ({
-      ..._pushHistory(s),
+      ..._pushHistory(s, `function:${id}`),
       functions: s.functions.map((f) =>
         f.id === id ? { ...f, ...patch } : f,
       ),
@@ -319,7 +385,7 @@ export const useEditor = create<State & Actions>((set) => ({
     })),
   updateClass: (id, patch) =>
     set((s) => ({
-      ..._pushHistory(s),
+      ..._pushHistory(s, `class:${id}`),
       classes: s.classes.map((c) =>
         c.id === id ? { ...c, ...patch } : c,
       ),
@@ -349,6 +415,8 @@ export const useEditor = create<State & Actions>((set) => ({
         // after the rollback (e.g. it was an add that got undone).
         selectedNodeId: null,
         saveStatus: "dirty",
+        historyGroup: null,
+        dragOrigin: null,
       };
     }),
   redo: () =>
@@ -361,6 +429,8 @@ export const useEditor = create<State & Actions>((set) => ({
         future: s.future.slice(1),
         selectedNodeId: null,
         saveStatus: "dirty",
+        historyGroup: null,
+        dragOrigin: null,
       };
     }),
 }));
