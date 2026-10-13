@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sys
 import traceback
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -23,6 +24,11 @@ from src.config import get_settings
 from src.email.templates import render_password_reset_html
 
 _RESEND_ENDPOINT = "https://api.resend.com/emails"
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+
+
+def _is_local_origin(url: str) -> bool:
+    return (urlsplit(url).hostname or "").lower() in _LOCAL_HOSTS
 
 
 async def send_password_reset(
@@ -45,6 +51,17 @@ async def send_password_reset(
         return
 
     if backend == "resend":
+        if _is_local_origin(settings.app_base_url):
+            # Real mail with a localhost link is always a misconfiguration:
+            # the recipient's browser can't reach it. Shout in the log so it
+            # is caught on the first send rather than by a user.
+            print(
+                f"[email/resend] APP_BASE_URL is {settings.app_base_url!r} — the link in "
+                "this email points at localhost and will not open for the recipient. "
+                "Set APP_BASE_URL to the public origin.",
+                file=sys.stderr,
+                flush=True,
+            )
         if not settings.resend_api_key:
             print(
                 f"[email/resend] RESEND_API_KEY is empty — falling back to stdout. link={link}",

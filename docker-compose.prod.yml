@@ -23,6 +23,11 @@ services:
   backend:
     restart: unless-stopped
     ports: !reset []
+    environment:
+      # Origin used in links inside emails (password reset). Pinned here,
+      # next to the Caddyfile's hostname, so a missing/stale value in the
+      # server .env can't send users to http://localhost:3000.
+      APP_BASE_URL: https://node-forge.com.br
 
   executor:
     restart: unless-stopped
