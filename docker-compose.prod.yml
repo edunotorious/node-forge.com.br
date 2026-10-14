@@ -56,6 +56,8 @@ services:
     # would shadow what the image built.
     build:
       target: prod
+      args:
+        BUILD_REV: ${BUILD_REV:-unknown}
     volumes: !reset []
     environment:
       NODE_ENV: production

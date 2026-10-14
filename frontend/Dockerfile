@@ -33,6 +33,9 @@ FROM base AS prod
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1
 
-RUN pnpm build
+# Commit the bundle was built from, served at /build-rev.txt so the
+# deploy (and anyone) can check which build is actually live.
+ARG BUILD_REV=unknown
+RUN echo "$BUILD_REV" > public/build-rev.txt && pnpm build
 
 CMD ["pnpm", "start"]

@@ -67,6 +67,28 @@ jobs:
             REBUILD_TARGETS=()
             [ "$FRONTEND_REV" = "$BUILT_REV" ] || REBUILD_TARGETS+=(frontend)
             COMPOSE_CHANGED=false
+            export BUILD_REV="$FRONTEND_REV"
+
+            # Server state as a GitHub annotation (readable on the run page
+            # and through the public API) whatever the outcome.
+            LIVE_URL="${LIVE_URL:-https://node-forge.com.br/build-rev.txt}"
+            diagnostics() {
+              set +e
+              {
+                echo "head=$(git rev-parse --short HEAD) before=${BEFORE:0:7} frontend_rev=${FRONTEND_REV:0:7} built_rev=${BUILT_REV:0:7}"
+                echo "targets=${REBUILD_TARGETS[*]:-none} compose_changed=$COMPOSE_CHANGED"
+                echo "live_rev=$(curl -s --max-time 10 "$LIVE_URL" 2>&1 | head -c 60)"
+                echo "container_rev=$($COMPOSE exec -T frontend cat public/build-rev.txt 2>&1 | head -c 60)"
+                docker ps -a --format '{{.Names}} | {{.Image}} | {{.Status}} | {{.CreatedAt}}'
+                docker inspect "$($COMPOSE ps -q frontend)" --format 'frontend image={{.Image}} cmd={{.Config.Cmd}} mounts={{len .Mounts}}' 2>&1
+                docker image ls --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.CreatedSince}}' | grep -i forge
+                docker network ls --format '{{.Name}}' | grep -i net | while read -r n; do
+                  echo "net $n: $(docker network inspect "$n" --format '{{range .Containers}}{{.Name}} {{end}}')"
+                done
+                git status --short | head -5
+              } 2>&1 | sed -e ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | sed 's/^/::notice title=deploy diagnostics::/'
+            }
+            trap diagnostics EXIT
             if [ "$BEFORE" != "$AFTER" ]; then
               git diff --quiet "$BEFORE" "$AFTER" -- backend/  || REBUILD_TARGETS+=(backend)
               git diff --quiet "$BEFORE" "$AFTER" -- executor/ || REBUILD_TARGETS+=(executor)
@@ -137,6 +159,24 @@ jobs:
               done
               # Leftovers from when the bundle was built at container start.
               docker volume rm node-forge_frontend_next_cache node-forge_frontend_node_modules >/dev/null 2>&1 || true
+
+              # The container answering is not proof the public site serves
+              # it (2026-10-13: a "successful" deploy kept the old site).
+              # Check through Caddy; restart it once if it lags behind.
+              live_rev() { curl -s --max-time 10 "$LIVE_URL" || true; }
+              if [ "$(live_rev)" != "$FRONTEND_REV" ]; then
+                echo ">>> public site not on $FRONTEND_REV yet — restarting caddy"
+                $COMPOSE restart caddy
+                for i in $(seq 1 30); do
+                  [ "$(live_rev)" = "$FRONTEND_REV" ] && break
+                  sleep 2
+                done
+              fi
+              if [ "$(live_rev)" != "$FRONTEND_REV" ]; then
+                echo "::error::public site serves '$(live_rev)', expected $FRONTEND_REV"
+                exit 1
+              fi
+              echo ">>> public site serves $FRONTEND_REV"
             fi
 
             # Each build leaves the previous images dangling.
