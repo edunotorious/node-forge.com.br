@@ -56,3 +56,6 @@ frontend/playwright/.cache/
 # Server-side deploy markers: commit the live frontend bundle was built from
 /.deploy-frontend-rev
 /.deploy-frontend-built
+
+# Database dumps taken by the deploy before migrating (server only)
+/backups/

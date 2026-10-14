@@ -42,7 +42,7 @@ jobs:
       # service's directory; this keeps redeploys fast when only the
       # README or workflows move. The `git diff --quiet` returns 1 when
       # there are changes, which our shell treats as "rebuild this one".
-      # The frontend is tracked by commit instead (see .deploy-frontend-rev).
+      # The frontend is tracked by commit instead (see .deploy-frontend-built).
       - name: Pull + selective rebuild + up
         run: |
           ssh -i ~/.ssh/id_ed25519 ubuntu@137.131.143.114 'bash -se' <<'EOF'
@@ -55,13 +55,12 @@ jobs:
 
             COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 
-            # Frontend bakes its bundle into a named volume and reuses it on
-            # start, so it is rebuilt by comparing the last commit that
+            # The frontend is rebuilt by comparing the last commit that
             # touched frontend/ with the one the live bundle was built from
-            # (recorded at the end of this script, only once the new bundle
-            # actually serves) instead of diffing BEFORE..AFTER. A missing
-            # or stale record (first run, a cancelled or failed deploy)
-            # still triggers the rebuild.
+            # (recorded below, only once the new bundle actually serves)
+            # instead of diffing BEFORE..AFTER. A missing or stale record
+            # (first run, a cancelled or failed deploy) still triggers the
+            # rebuild.
             FRONTEND_REV=$(git log -1 --format=%H -- frontend/)
             BUILT_REV=$(cat .deploy-frontend-built 2>/dev/null || true)
 
@@ -81,49 +80,75 @@ jobs:
               exit 0
             fi
 
-            REBUILD_FRONTEND=false
-            if printf '%s\n' "${REBUILD_TARGETS[@]}" | grep -qx frontend; then
-              REBUILD_FRONTEND=true
-              $COMPOSE down frontend
-              # node_modules is a named volume too, and Docker only seeds a
-              # named volume from the image when it is first created: without
-              # dropping it, a newly added dependency never reaches the
-              # container and `next build` fails (vitest, 2026-10-13).
-              docker volume rm -f node-forge_frontend_next_cache node-forge_frontend_node_modules || true
+            has_target() { printf '%s\n' "${REBUILD_TARGETS[@]}" | grep -qx "$1"; }
+
+            # Build every image first, while the current containers keep
+            # serving. The frontend compiles its bundle inside the image
+            # (Dockerfile `prod` stage), so a failed `next build` stops the
+            # deploy here and the live site is untouched.
+            if [ "$COMPOSE_CHANGED" = true ]; then
+              echo ">>> building all images"
+              $COMPOSE build
+            else
+              echo ">>> building: ${REBUILD_TARGETS[*]}"
+              $COMPOSE build "${REBUILD_TARGETS[@]}"
             fi
 
+            # Migrations run explicitly, before the new backend starts, and
+            # only after a dump of the database. Migrations must stay
+            # additive (the old backend keeps serving until the swap).
+            if [ "$COMPOSE_CHANGED" = true ] || has_target backend; then
+              $COMPOSE up -d postgres
+              until $COMPOSE exec -T postgres sh -c 'pg_isready -U "$POSTGRES_USER"' >/dev/null 2>&1; do sleep 2; done
+              mkdir -p -m 700 backups
+              DUMP="backups/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ)-${AFTER:0:7}.dump"
+              $COMPOSE exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$DUMP"
+              echo ">>> database backup: $DUMP ($(du -h "$DUMP" | cut -f1))"
+              # Keep the 10 most recent dumps.
+              ls -1t backups/pre-deploy-*.dump | tail -n +11 | xargs -r rm --
+              echo ">>> applying migrations"
+              $COMPOSE run --rm --no-deps -T backend uv run --no-sync alembic upgrade head
+            fi
+
+            # Swap containers. Images are already built, so this is just a
+            # restart per service.
             if [ "$COMPOSE_CHANGED" = true ]; then
               echo ">>> compose or Caddyfile changed — applying full up"
-              $COMPOSE up -d --build
+              $COMPOSE up -d
             else
-              echo ">>> rebuilding: ${REBUILD_TARGETS[*]}"
-              $COMPOSE up -d --build "${REBUILD_TARGETS[@]}"
+              echo ">>> restarting: ${REBUILD_TARGETS[*]}"
+              $COMPOSE up -d "${REBUILD_TARGETS[@]}"
             fi
 
-            if [ "$REBUILD_FRONTEND" = true ]; then
-              # `next build` runs on container start; wait for the new bundle
-              # to serve before recording it, so a failed build is retried
-              # by the next deploy instead of being marked as live.
-              echo ">>> waiting for the frontend build"
-              for i in $(seq 1 120); do
+            if has_target frontend; then
+              echo ">>> waiting for the frontend"
+              for i in $(seq 1 60); do
                 if $COMPOSE exec -T frontend wget -q -O /dev/null http://localhost:3000/login 2>/dev/null; then
                   echo "$FRONTEND_REV" > .deploy-frontend-built
-                  echo ">>> frontend serving after ~$((i * 5))s"
-                  exit 0
+                  echo ">>> frontend serving after ~$((i * 2))s"
+                  break
                 fi
-                sleep 5
+                if [ "$i" -eq 60 ]; then
+                  echo ">>> frontend did not come up in 2 min"
+                  $COMPOSE logs --tail=80 frontend
+                  exit 1
+                fi
+                sleep 2
               done
-              echo ">>> frontend did not come up in 10 min"
-              $COMPOSE logs --tail=80 frontend
-              exit 1
+              # Leftovers from when the bundle was built at container start.
+              docker volume rm node-forge_frontend_next_cache node-forge_frontend_node_modules >/dev/null 2>&1 || true
             fi
+
+            # Each build leaves the previous images dangling.
+            docker image prune -f >/dev/null
           EOF
 
       - name: Smoke test
         run: |
-          # Up to ~5 min: a frontend rebuild runs `next build` on container
-          # start, which takes a few minutes on the VM.
-          for i in $(seq 1 75); do
+          # The previous step only returns once the containers are swapped,
+          # so the site should answer right away; allow ~1 min for the
+          # backend to come up behind the proxy.
+          for i in $(seq 1 15); do
             code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://node-forge.com.br/api/health || true)
             if [ "$code" = "200" ]; then
               echo "smoke ok after ${i} attempts"; exit 0

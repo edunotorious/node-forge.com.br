@@ -26,11 +26,24 @@ services:
   backend:
     restart: unless-stopped
     ports: !reset []
+    # Run the code baked into the image: no source bind-mounts and no
+    # --reload, so a `git pull` on the server can't change the running
+    # API before the deploy rebuilt and migrated it. The deploy applies
+    # migrations explicitly (after a backup); the upgrade here is a no-op
+    # safety net for a manual `up`.
+    volumes: !reset []
+    command:
+      - sh
+      - -c
+      - uv run --no-sync alembic upgrade head && exec uv run --no-sync uvicorn src.main:app --host 0.0.0.0 --port 8000
     environment:
       # Origin used in links inside emails (password reset). Pinned here,
       # next to the Caddyfile's hostname, so a missing/stale value in the
       # server .env can't send users to http://localhost:3000.
       APP_BASE_URL: https://node-forge.com.br
+      # Same idea for the settings whose dev defaults are unsafe in prod.
+      COOKIE_SECURE: "true"
+      CORS_ORIGINS: https://node-forge.com.br
 
   executor:
     restart: unless-stopped
@@ -38,24 +51,14 @@ services:
   frontend:
     restart: unless-stopped
     ports: !reset []
+    # The `prod` stage compiles the bundle at image build time and runs
+    # `next start`. No bind-mount or node_modules/.next volumes: those
+    # would shadow what the image built.
+    build:
+      target: prod
+    volumes: !reset []
     environment:
       NODE_ENV: production
-    # Override the dev CMD: build the production bundle first run, then
-    # start the optimised server. Next 16 build artifact lives at /app/.next
-    # which is a named volume — survives restarts, gets rebuilt on first
-    # run if absent. The  guard keeps subsequent
-    # container restarts fast.
-    command:
-      - sh
-      - -c
-      - |
-        if [ ! -d .next/server ] || [ ! -f .next/BUILD_ID ]; then
-          echo ">>> building production bundle"
-          pnpm build
-        else
-          echo ">>> reusing existing production build"
-        fi
-        exec pnpm start
 
 volumes:
   caddy_data:
