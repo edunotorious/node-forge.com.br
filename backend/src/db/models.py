@@ -264,6 +264,7 @@ class VaultListing(Base):
     __table_args__ = (
         Index("idx_vault_listings_published_at", "published_at"),
         Index("idx_vault_listings_author_id", "author_id"),
+        CheckConstraint("price_cents >= 0", name="ck_vault_listings_price_non_negative"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -287,6 +288,9 @@ class VaultListing(Base):
     clone_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     like_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     comment_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # 0 = free. Paid listings are preview-only until checkout exists.
+    price_cents: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="BRL")
 
     author: Mapped["User | None"] = relationship("User", foreign_keys=[author_id])
     tags: Mapped[list["VaultTag"]] = relationship(

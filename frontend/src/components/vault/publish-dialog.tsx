@@ -18,7 +18,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PriceModeToggle } from "@/components/vault/listing-visuals";
 import { useRouter } from "@/i18n/navigation";
+import { isValidPaidPrice, parsePriceInput } from "@/lib/price";
 
 const TAG_LIMIT = 5;
 
@@ -33,7 +35,7 @@ interface PublishDialogProps {
 }
 
 // "Publish to Vault" — snapshot the current project under a new title
-// + description + up to 5 tags. The dialog seeds the title from the
+// + description + up to 5 tags, free by default or with a price. The dialog seeds the title from the
 // project name so the common case is one click + Submit.
 export function PublishToVaultDialog({
   projectId,
@@ -48,6 +50,8 @@ export function PublishToVaultDialog({
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
+  const [paid, setPaid] = useState(false);
+  const [priceDraft, setPriceDraft] = useState("");
 
   // When the project is renamed externally, refresh the seed title each
   // time the dialog opens — without clobbering a half-typed title from
@@ -61,6 +65,8 @@ export function PublishToVaultDialog({
       setDescription("");
       setTags([]);
       setTagDraft("");
+      setPaid(false);
+      setPriceDraft("");
     }
   }
 
@@ -75,6 +81,7 @@ export function PublishToVaultDialog({
           title: title.trim(),
           description: description.trim(),
           tags,
+          price_cents: paid ? priceCents : 0,
         }),
       });
       if (!res.ok) {
@@ -119,6 +126,8 @@ export function PublishToVaultDialog({
   }
 
   const titleValid = title.trim().length >= 3 && title.trim().length <= 200;
+  const priceCents = parsePriceInput(priceDraft);
+  const priceValid = !paid || isValidPaidPrice(priceCents);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -194,6 +203,35 @@ export function PublishToVaultDialog({
             />
             <p className="text-xs text-muted-foreground">{t("tagsHelp")}</p>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="vault-publish-price">{t("priceField")}</Label>
+            <PriceModeToggle paid={paid} onChange={setPaid} />
+            {paid ? (
+              <Input
+                id="vault-publish-price"
+                value={priceDraft}
+                onChange={(e) => setPriceDraft(e.target.value)}
+                inputMode="decimal"
+                placeholder={t("pricePlaceholder")}
+                aria-invalid={!priceValid}
+              />
+            ) : null}
+            <p
+              className={
+                "text-xs " +
+                (paid && priceDraft && !priceValid
+                  ? "text-destructive"
+                  : "text-muted-foreground")
+              }
+            >
+              {paid && priceDraft && !priceValid
+                ? t("priceInvalid")
+                : paid
+                  ? t("priceHelp")
+                  : t("freeHelp")}
+            </p>
+          </div>
         </div>
 
         <DialogFooter>
@@ -206,7 +244,7 @@ export function PublishToVaultDialog({
           </Button>
           <Button
             onClick={() => publish.mutate()}
-            disabled={!titleValid || publish.isPending}
+            disabled={!titleValid || !priceValid || publish.isPending}
           >
             {publish.isPending ? t("publishing") : t("publish")}
           </Button>

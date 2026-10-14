@@ -177,3 +177,93 @@ async def test_vault_writes_require_auth(client: AsyncClient) -> None:
     assert (await client.post(f"/vault/{lid}/like")).status_code == 401
     assert (await client.post(f"/vault/{lid}/clone")).status_code == 401
     assert (await client.post(f"/vault/{lid}/comments", json={"body": "x"})).status_code == 401
+
+
+async def test_publish_defaults_to_free_and_reports_snapshot_stats(client: AsyncClient) -> None:
+    await login_as(client, "author@example.com")
+    listing = await _publish(client)
+    assert (listing["price_cents"], listing["currency"], listing["locked"]) == (0, "BRL", False)
+    assert (listing["file_count"], listing["node_count"]) == (1, 1)
+
+
+async def test_price_validation(client: AsyncClient) -> None:
+    await login_as(client, "author@example.com")
+    p = await create_project(client)
+    for bad in (-1, 50, 1_000_001):
+        res = await client.post(
+            "/vault", json={"project_id": p["id"], "title": "Paid", "price_cents": bad}
+        )
+        assert res.status_code == 422, bad
+
+    listing = await _publish(client)
+    res = await client.patch(f"/vault/{listing['id']}", json={"price_cents": 99})
+    assert res.status_code == 422
+    res = await client.patch(f"/vault/{listing['id']}", json={"price_cents": 2990})
+    assert res.json()["price_cents"] == 2990
+    # Omitting the price on a later edit keeps it.
+    res = await client.patch(f"/vault/{listing['id']}", json={"title": "Renamed"})
+    assert res.json()["price_cents"] == 2990
+
+
+async def test_paid_listing_is_preview_only_except_for_author(client: AsyncClient) -> None:
+    graph = {**GRAPH, "config": {"num_qubits": 3, "shots": 512}}
+    await login_as(client, "author@example.com")
+    p = await create_project(client)
+    fid = p["files"][0]["id"]
+    await client.patch(f"/projects/{p['id']}/files/{fid}", json={"graph_json": graph})
+    res = await client.post(
+        "/vault", json={"project_id": p["id"], "title": "Premium", "price_cents": 4990}
+    )
+    listing = res.json()
+    assert listing["locked"] is False
+    assert listing["files"][0]["graph_json"] == graph
+
+    # The author still clones their own listing.
+    assert (await client.post(f"/vault/{listing['id']}/clone")).status_code == 200
+
+    for who in ("buyer@example.com", None):
+        if who:
+            await login_as(client, who)
+        else:
+            await client.post("/auth/logout")
+            client.cookies.clear()
+        detail = (await client.get(f"/vault/{listing['slug']}")).json()
+        assert detail["locked"] is True
+        assert detail["files"] == [
+            {"name": "Arquivo 1", "position": 0, "graph_json": {"config": graph["config"]}}
+        ]
+        # The cards still advertise the size of what is being sold.
+        assert (detail["node_count"], detail["num_qubits"]) == (1, 3)
+
+    await login_as(client, "buyer@example.com")
+    assert (await client.post(f"/vault/{listing['id']}/clone")).status_code == 402
+    assert (await client.get(f"/vault/{listing['slug']}")).json()["clone_count"] == 1
+
+
+async def test_price_filter_and_sort(client: AsyncClient) -> None:
+    await login_as(client, "author@example.com")
+    await _publish(client, "Free one")
+    await _publish(client, "Cheap", price_cents=990)
+    await _publish(client, "Pricey", price_cents=9990)
+
+    def titles(res) -> list[str]:
+        return [x["title"] for x in res.json()]
+
+    assert titles(await client.get("/vault?price=free")) == ["Free one"]
+    assert set(titles(await client.get("/vault?price=paid"))) == {"Cheap", "Pricey"}
+    assert titles(await client.get("/vault?price=paid&sort=price_asc")) == ["Cheap", "Pricey"]
+    assert titles(await client.get("/vault?sort=price_desc")) == ["Pricey", "Cheap", "Free one"]
+    assert (await client.get("/vault?price=gratis")).status_code == 422
+
+
+async def test_popular_tags_are_counted(client: AsyncClient) -> None:
+    await login_as(client, "author@example.com")
+    await _publish(client, "Alpha", tags=["bell", "basics"])
+    await _publish(client, "Beta", tags=["bell"])
+    await client.post("/auth/logout")
+    client.cookies.clear()
+
+    res = await client.get("/vault/tags")
+    assert res.status_code == 200
+    assert res.json() == [{"tag": "bell", "count": 2}, {"tag": "basics", "count": 1}]
+    assert len((await client.get("/vault/tags?limit=1")).json()) == 1

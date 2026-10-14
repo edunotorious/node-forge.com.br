@@ -19,6 +19,23 @@ def _normalize_tag(raw: str) -> str:
     return raw.strip().lower().replace(" ", "-").replace("_", "-")
 
 
+# Prices are in cents of `currency` (BRL only for now). 0 means free; a
+# paid listing costs between R$ 1,00 and R$ 10.000,00 so typos like an
+# extra zero or a 1-cent listing get caught at publish time.
+MIN_PRICE_CENTS = 100
+MAX_PRICE_CENTS = 1_000_000
+
+
+def _validate_price(v: int | None) -> int | None:
+    if v is None or v == 0:
+        return v
+    if not MIN_PRICE_CENTS <= v <= MAX_PRICE_CENTS:
+        raise ValueError(
+            f"Price must be 0 (free) or between {MIN_PRICE_CENTS} and {MAX_PRICE_CENTS} cents"
+        )
+    return v
+
+
 class VaultPublishRequest(BaseModel):
     """Body for POST /vault — publishes a project as a new listing."""
 
@@ -27,6 +44,12 @@ class VaultPublishRequest(BaseModel):
     description: str = Field(default="", max_length=4000)
     # Free-tag, max 5. Empty list is fine.
     tags: list[str] = Field(default_factory=list, max_length=5)
+    price_cents: int = Field(default=0, ge=0)
+
+    @field_validator("price_cents")
+    @classmethod
+    def validate_price(cls, v: int) -> int:
+        return _validate_price(v) or 0
 
     @field_validator("tags", mode="before")
     @classmethod
@@ -53,6 +76,7 @@ class VaultUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=3, max_length=200)
     description: str | None = Field(default=None, max_length=4000)
     tags: list[str] | None = Field(default=None, max_length=5)
+    price_cents: int | None = Field(default=None, ge=0)
 
     @field_validator("tags", mode="before")
     @classmethod
@@ -60,6 +84,11 @@ class VaultUpdateRequest(BaseModel):
         if v is None:
             return None
         return VaultPublishRequest.normalize_and_validate_tags(v)
+
+    @field_validator("price_cents")
+    @classmethod
+    def validate_price(cls, v: int | None) -> int | None:
+        return _validate_price(v)
 
 
 class AuthorPublicSummary(BaseModel):
@@ -109,6 +138,14 @@ class VaultListingSummary(BaseModel):
     # Whether the requesting user has already liked this listing. None
     # when the request is unauthenticated.
     liked_by_me: bool | None = None
+    price_cents: int = 0
+    currency: str = "BRL"
+    # Shape of the snapshot, for the marketplace cards. Computed from the
+    # snapshot so paid listings can advertise their size without exposing
+    # the graph itself.
+    file_count: int = 0
+    node_count: int = 0
+    num_qubits: int = 0
 
 
 class FileSnapshot(BaseModel):
@@ -118,9 +155,19 @@ class FileSnapshot(BaseModel):
 
 
 class VaultListingDetail(VaultListingSummary):
-    """Detail-view payload — includes the full files snapshot."""
+    """Detail-view payload — includes the full files snapshot.
+
+    For a paid listing seen by anyone but its author, `locked` is true and
+    each file's graph_json is cut down to its `config` (qubits, shots...):
+    the preview shows what the project is without giving it away."""
 
     files: list[FileSnapshot]
+    locked: bool = False
+
+
+class VaultTagCount(BaseModel):
+    tag: str
+    count: int
 
 
 class VaultCommentCreate(BaseModel):

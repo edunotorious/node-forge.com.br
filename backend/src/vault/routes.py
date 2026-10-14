@@ -23,10 +23,10 @@ import secrets
 import unicodedata
 import uuid
 from collections import defaultdict
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, delete, desc, exists, or_, select, update
+from sqlalchemy import and_, asc, delete, desc, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -50,6 +50,7 @@ from src.vault.schemas import (
     VaultListingDetail,
     VaultListingSummary,
     VaultPublishRequest,
+    VaultTagCount,
     VaultUpdateRequest,
 )
 
@@ -140,11 +141,29 @@ async def _liked_set(
     return {row[0] for row in rows.all()}
 
 
+def _snapshot_stats(snapshot: list[Any]) -> tuple[int, int, int]:
+    """(file_count, node_count, num_qubits) of a files snapshot.
+
+    num_qubits is the widest file, which is what a buyer cares about.
+    Defensive about shape: snapshots are user-authored JSON."""
+    node_count = 0
+    num_qubits = 0
+    for entry in snapshot:
+        graph = entry.get("graph_json") or {}
+        nodes = graph.get("nodes")
+        node_count += len(nodes) if isinstance(nodes, list) else 0
+        qubits = (graph.get("config") or {}).get("num_qubits")
+        if isinstance(qubits, int):
+            num_qubits = max(num_qubits, qubits)
+    return len(snapshot), node_count, num_qubits
+
+
 def _build_summary(
     listing: VaultListing,
     tags: list[str],
     liked_by_me: bool | None,
 ) -> VaultListingSummary:
+    file_count, node_count, num_qubits = _snapshot_stats(listing.files_snapshot or [])
     return VaultListingSummary(
         id=listing.id,
         slug=listing.slug,
@@ -158,7 +177,17 @@ def _build_summary(
         like_count=listing.like_count,
         comment_count=listing.comment_count,
         liked_by_me=liked_by_me,
+        price_cents=listing.price_cents,
+        currency=listing.currency,
+        file_count=file_count,
+        node_count=node_count,
+        num_qubits=num_qubits,
     )
+
+
+def _is_locked(listing: VaultListing, viewer_id: uuid.UUID | None) -> bool:
+    """Paid listings are preview-only for everyone except their author."""
+    return listing.price_cents > 0 and (viewer_id is None or listing.author_id != viewer_id)
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +235,7 @@ async def publish_project(
         description=data.description,
         slug=slug,
         files_snapshot=snapshot,
+        price_cents=data.price_cents,
     )
     session.add(listing)
     await session.flush()  # need the id for the tag rows
@@ -224,23 +254,32 @@ async def publish_project(
         )
     ).scalar_one()
 
-    return _detail_from_listing(listing, tags=data.tags, liked_by_me=False)
+    return _detail_from_listing(listing, tags=data.tags, liked_by_me=False, viewer_id=user.id)
 
 
 def _detail_from_listing(
-    listing: VaultListing, tags: list[str], liked_by_me: bool | None
+    listing: VaultListing,
+    tags: list[str],
+    liked_by_me: bool | None,
+    viewer_id: uuid.UUID | None,
 ) -> VaultListingDetail:
     summary = _build_summary(listing, tags, liked_by_me)
+    locked = _is_locked(listing, viewer_id)
     return VaultListingDetail(
         **summary.model_dump(),
         files=[
             FileSnapshot(
                 name=f["name"],
                 position=f["position"],
-                graph_json=f["graph_json"],
+                graph_json=(
+                    {"config": (f.get("graph_json") or {}).get("config") or {}}
+                    if locked
+                    else f["graph_json"]
+                ),
             )
             for f in listing.files_snapshot
         ],
+        locked=locked,
     )
 
 
@@ -254,7 +293,8 @@ async def list_listings(
     q: str | None = Query(default=None, max_length=200),
     tag: str | None = Query(default=None, max_length=50),
     author: uuid.UUID | None = Query(default=None),
-    sort: str = Query(default="recent", pattern="^(recent|popular|liked)$"),
+    price: str = Query(default="all", pattern="^(all|free|paid)$"),
+    sort: str = Query(default="recent", pattern="^(recent|popular|liked|price_asc|price_desc)$"),
     limit: int = Query(default=24, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> list[VaultListingSummary]:
@@ -264,6 +304,7 @@ async def list_listings(
         recent  — newest published_at first (default)
         popular — most clones first, then likes as tiebreak
         liked   — most likes first
+        price_asc / price_desc — cheapest / most expensive first
     """
     stmt = select(VaultListing).options(selectinload(VaultListing.author))
 
@@ -283,6 +324,10 @@ async def list_listings(
         stmt = stmt.where(tag_match)
     if author:
         stmt = stmt.where(VaultListing.author_id == author)
+    if price == "free":
+        stmt = stmt.where(VaultListing.price_cents == 0)
+    elif price == "paid":
+        stmt = stmt.where(VaultListing.price_cents > 0)
 
     if sort == "popular":
         stmt = stmt.order_by(
@@ -293,6 +338,12 @@ async def list_listings(
     elif sort == "liked":
         stmt = stmt.order_by(
             desc(VaultListing.like_count),
+            desc(VaultListing.published_at),
+        )
+    elif sort in ("price_asc", "price_desc"):
+        direction = asc if sort == "price_asc" else desc
+        stmt = stmt.order_by(
+            direction(VaultListing.price_cents),
             desc(VaultListing.published_at),
         )
     else:
@@ -313,6 +364,25 @@ async def list_listings(
         )
         for listing in listings
     ]
+
+
+# ---------------------------------------------------------------------------
+# Tags — the most used ones, for the marketplace category strip. Declared
+# before /{slug} so "tags" is not read as a listing slug.
+# ---------------------------------------------------------------------------
+@router.get("/tags", response_model=list[VaultTagCount])
+async def popular_tags(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    limit: int = Query(default=12, ge=1, le=50),
+) -> list[VaultTagCount]:
+    count = func.count(VaultTag.listing_id)
+    rows = await session.execute(
+        select(VaultTag.tag, count)
+        .group_by(VaultTag.tag)
+        .order_by(desc(count), VaultTag.tag)
+        .limit(limit)
+    )
+    return [VaultTagCount(tag=tag, count=n) for tag, n in rows.all()]
 
 
 # ---------------------------------------------------------------------------
@@ -339,6 +409,7 @@ async def get_listing(
         listing,
         tags=tags_map.get(listing.id, []),
         liked_by_me=(listing.id in liked) if user else None,
+        viewer_id=user.id if user else None,
     )
 
 
@@ -360,6 +431,8 @@ async def update_listing(
         listing.title = data.title
     if data.description is not None:
         listing.description = data.description
+    if data.price_cents is not None:
+        listing.price_cents = data.price_cents
 
     if data.tags is not None:
         # Replace-all semantics: easier to reason about than diff-merge,
@@ -378,7 +451,9 @@ async def update_listing(
         )
     ).scalar_one()
     tags_map = await _tags_by_listing(session, [listing.id])
-    return _detail_from_listing(listing, tags=tags_map.get(listing.id, []), liked_by_me=False)
+    return _detail_from_listing(
+        listing, tags=tags_map.get(listing.id, []), liked_by_me=False, viewer_id=user.id
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -430,7 +505,9 @@ async def republish_listing(
         )
     ).scalar_one()
     tags_map = await _tags_by_listing(session, [listing.id])
-    return _detail_from_listing(listing, tags=tags_map.get(listing.id, []), liked_by_me=False)
+    return _detail_from_listing(
+        listing, tags=tags_map.get(listing.id, []), liked_by_me=False, viewer_id=user.id
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -461,6 +538,12 @@ async def clone_listing(
     listing = await session.get(VaultListing, listing_id)
     if listing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Listing not found")
+    if _is_locked(listing, user.id):
+        # No checkout yet: a paid listing can only be cloned by its author.
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="This listing is paid; purchases are not available yet",
+        )
 
     # Build a new project from the snapshot. Naming convention mirrors the
     # browser "Save as" flow — `Bell state (clone)` so the user can tell
