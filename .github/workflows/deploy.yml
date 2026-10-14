@@ -46,6 +46,13 @@ jobs:
       - name: Pull + selective rebuild + up
         run: |
           ssh -i ~/.ssh/id_ed25519 ubuntu@137.131.143.114 'bash -se' <<'EOF'
+            # The script arrives on stdin, and `docker compose exec/run`
+            # forward stdin to the container: called directly they swallow
+            # the rest of the script and bash exits 0 mid-deploy (that is how
+            # the a3054d0 and b73915d deploys "succeeded" without swapping a
+            # single container). Wrapping everything in a function makes bash
+            # read it all first; it then runs with stdin closed.
+            deploy() {
             set -euo pipefail
             cd /opt/node-forge
 
@@ -119,28 +126,25 @@ jobs:
             # Migrations run explicitly, before the new backend starts, and
             # only after a dump of the database. Migrations must stay
             # additive (the old backend keeps serving until the swap).
-            if [ "$COMPOSE_CHANGED" = true ] || has_target backend; then
-              $COMPOSE up -d postgres
-              until $COMPOSE exec -T postgres sh -c 'pg_isready -U "$POSTGRES_USER"' >/dev/null 2>&1; do sleep 2; done
-              mkdir -p -m 700 backups
-              DUMP="backups/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ)-${AFTER:0:7}.dump"
-              $COMPOSE exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$DUMP"
-              echo ">>> database backup: $DUMP ($(du -h "$DUMP" | cut -f1))"
-              # Keep the 10 most recent dumps.
-              ls -1t backups/pre-deploy-*.dump | tail -n +11 | xargs -r rm --
-              echo ">>> applying migrations"
-              $COMPOSE run --rm --no-deps -T backend uv run --no-sync alembic upgrade head
-            fi
+            # Done on every deploy that gets this far: the dump is small and
+            # the upgrade is a no-op when there is nothing to apply.
+            $COMPOSE up -d postgres
+            until $COMPOSE exec -T postgres sh -c 'pg_isready -U "$POSTGRES_USER"' >/dev/null 2>&1; do sleep 2; done
+            mkdir -p -m 700 backups
+            DUMP="backups/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ)-${AFTER:0:7}.dump"
+            $COMPOSE exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$DUMP"
+            echo ">>> database backup: $DUMP ($(du -h "$DUMP" | cut -f1))"
+            # Keep the 10 most recent dumps.
+            ls -1t backups/pre-deploy-*.dump | tail -n +11 | xargs -r rm --
+            echo ">>> applying migrations"
+            $COMPOSE run --rm --no-deps -T backend uv run --no-sync alembic upgrade head
 
-            # Swap containers. Images are already built, so this is just a
-            # restart per service.
-            if [ "$COMPOSE_CHANGED" = true ]; then
-              echo ">>> compose or Caddyfile changed — applying full up"
-              $COMPOSE up -d
-            else
-              echo ">>> restarting: ${REBUILD_TARGETS[*]}"
-              $COMPOSE up -d "${REBUILD_TARGETS[@]}"
-            fi
+            # Swap containers. Images are already built; a plain `up -d`
+            # recreates exactly the services whose image or config differs
+            # from what runs, so it also heals drift left by an interrupted
+            # deploy instead of trusting the BEFORE..AFTER diff.
+            echo ">>> applying compose (recreates what changed)"
+            $COMPOSE up -d
 
             if has_target frontend; then
               echo ">>> waiting for the frontend"
@@ -181,6 +185,8 @@ jobs:
 
             # Each build leaves the previous images dangling.
             docker image prune -f >/dev/null
+            }
+            deploy </dev/null
           EOF
 
       - name: Smoke test
