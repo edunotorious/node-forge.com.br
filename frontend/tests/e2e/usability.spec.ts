@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Usability improvements: public home page, empty-canvas onboarding with
 // the Bell-state example, quick guide, real Stop button with live output,
-// and the in-app feedback dialog.
+// (the public feedback wall has its own spec, feedback.spec.ts).
 
 type Project = { id: string; files: Array<{ id: string }> };
 
@@ -123,25 +123,5 @@ test.describe("usability", () => {
     await expect(page.getByText("Execution stopped by the user")).toBeVisible();
     await expect(stop).toBeDisabled();
     await expect(page.getByRole("button", { name: "Executar" })).toBeEnabled();
-  });
-
-  test("feedback dialog sends a rating and a comment", async ({ page }) => {
-    await page.goto("/projects");
-    await page.getByRole("button", { name: "Feedback" }).click();
-    const dialog = page.getByRole("dialog");
-    const send = dialog.getByRole("button", { name: "Enviar" });
-    await expect(send).toBeDisabled();
-
-    await dialog.getByRole("button", { name: "4 de 5" }).click();
-    await dialog.getByLabel("Comentário").fill("Teste E2E: o exemplo de Bell ajudou");
-    const sent = page.waitForResponse(
-      (r) => r.url().endsWith("/api/feedback") && r.request().method() === "POST",
-    );
-    await send.click();
-    const res = await sent;
-    expect(res.status()).toBe(201);
-    expect(await res.json()).toMatchObject({ rating: 4, page: "/projects" });
-    await expect(page.getByText("Obrigado pelo feedback!")).toBeVisible();
-    await expect(dialog).toBeHidden();
   });
 });
