@@ -180,6 +180,35 @@ export function Editor({ initial }: EditorProps) {
   // finished job never lands in another file's (or project's) console.
   const runAbortRef = useRef<AbortController | null>(null);
   useEffect(() => () => runAbortRef.current?.abort(), []);
+  // Job being run right now, and whether Stop was pressed before the
+  // POST /run answered (the job id is not known yet at that point).
+  const activeJobIdRef = useRef<string | null>(null);
+  const stopRequestedRef = useRef(false);
+  const setIsStopping = useEditor((s) => s.setIsStopping);
+
+  const cancelJob = useCallback(
+    async (jobId: string) => {
+      try {
+        const res = await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
+        if (!res.ok) throw new Error(`cancel HTTP ${res.status}`);
+        // The poll loop picks the terminal status up on its next tick.
+      } catch (err) {
+        console.error("stop failed", err);
+        toast.error(t("run.stopFailed"));
+        setIsStopping(false);
+      }
+    },
+    [setIsStopping, t],
+  );
+
+  const stopRun = useCallback(() => {
+    const state = useEditor.getState();
+    if (!state.isRunning || state.isStopping) return;
+    setIsStopping(true);
+    const jobId = activeJobIdRef.current;
+    if (jobId) void cancelJob(jobId);
+    else stopRequestedRef.current = true;
+  }, [cancelJob, setIsStopping]);
 
   const runFile = useCallback(async () => {
     const state = useEditor.getState();
@@ -188,6 +217,8 @@ export function Editor({ initial }: EditorProps) {
     runAbortRef.current = abort;
     const stillCurrent = () =>
       !abort.signal.aborted && useEditor.getState().fileId === state.fileId;
+    activeJobIdRef.current = null;
+    stopRequestedRef.current = false;
     setIsRunning(true);
     setBottomTab("console");
     try {
@@ -205,6 +236,8 @@ export function Editor({ initial }: EditorProps) {
         throw new Error(body.detail ?? `HTTP ${res.status}`);
       }
       let job: ExecutionJob = await res.json();
+      activeJobIdRef.current = job.id;
+      if (stopRequestedRef.current) void cancelJob(job.id);
       if (!stillCurrent()) return;
       setLastJob(job);
 
@@ -234,9 +267,10 @@ export function Editor({ initial }: EditorProps) {
     } finally {
       // After an unmount the store may already belong to another project;
       // only the run that still owns it clears the flag.
+      activeJobIdRef.current = null;
       if (!abort.signal.aborted) setIsRunning(false);
     }
-  }, [flushSave, setIsRunning, setLastJob, setBottomTab, t]);
+  }, [flushSave, setIsRunning, setLastJob, setBottomTab, cancelJob, t]);
 
   // Debounced auto-save: when status flips to "dirty", wait
   // AUTOSAVE_DEBOUNCE_MS of quiet then PATCH.
@@ -290,7 +324,11 @@ export function Editor({ initial }: EditorProps) {
     <ReactFlowProvider>
       <div className="flex h-[calc(100vh-3rem)] flex-col">
         <EditorTopBar onSaveNow={() => void save()} flushSave={flushSave} />
-        <FileTabsBar flushSave={flushSave} onRun={() => void runFile()} />
+        <FileTabsBar
+          flushSave={flushSave}
+          onRun={() => void runFile()}
+          onStop={stopRun}
+        />
         <div className="flex flex-1 overflow-hidden">
           <LeftPanel />
           <Canvas />

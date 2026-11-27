@@ -7,6 +7,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from src.auth.rate_limit import limiter
 from src.auth.routes import router as auth_router
 from src.config import get_settings
+from src.feedback.routes import router as feedback_router
 from src.projects.routes import router as projects_router
 from src.runner.routes import router as runner_router
 from src.users.routes import router as users_router
@@ -41,6 +42,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 app.include_router(auth_router)
+app.include_router(feedback_router)
 app.include_router(projects_router)
 app.include_router(runner_router)
 app.include_router(users_router)

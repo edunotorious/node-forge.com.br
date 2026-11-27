@@ -133,7 +133,11 @@
     "projectNamePlaceholder": "Nome do projeto",
     "save": "Salvar",
     "publishToVault": "Publicar no Vault",
-    "run": "Run",
+    "run": {
+      "failed": "Falha ao executar",
+      "rateLimited": "Muitas execuções em pouco tempo. Aguarde um minuto e tente de novo.",
+      "stopFailed": "Não foi possível parar a execução"
+    },
     "runDisabledTooltip": "Disponível na Phase 7",
     "autosaveFailed": "Falha ao salvar projeto",
     "status": {
@@ -255,13 +259,12 @@
     },
     "runControls": {
       "play": "Executar",
-      "pause": "Pausar",
-      "stop": "Parar",
-      "comingSoon": "Em breve",
-      "running": "Executando..."
+      "stop": "Parar execução",
+      "running": "Executando...",
+      "stopIdle": "Nada em execução"
     },
     "console": {
-      "empty": "Nenhuma execução ainda. Clique em ▶ para rodar o circuito.",
+      "empty": "Nenhuma execução ainda. Clique em ▶ (no canto direito da barra de arquivos) para rodar o circuito.",
       "running": "Executando…",
       "exitOk": "Concluído",
       "exitFailed": "Falhou",
@@ -270,11 +273,10 @@
       "stdout": "stdout",
       "stderr": "stderr",
       "artifacts": "Artefatos",
-      "elapsed": "Tempo: {ms}ms"
-    },
-    "run": {
-      "failed": "Falha ao executar",
-      "rateLimited": "Muitas execuções em pouco tempo. Aguarde um minuto e tente de novo."
+      "elapsed": "Tempo: {ms}ms",
+      "exitCancelled": "Interrompido",
+      "elapsedLive": "Executando há {seconds}s",
+      "waitingOutput": "Aguardando a saída do script… (a primeira execução pode levar alguns segundos)"
     },
     "files": {
       "addAria": "Adicionar novo arquivo",
@@ -297,6 +299,48 @@
       "emptySelection": "Clique num nodo no canvas para ver/editar suas propriedades.",
       "type": "Tipo:",
       "id": "id:"
+    },
+    "guide": {
+      "open": "Guia rápido",
+      "title": "Guia rápido do editor",
+      "intro": "Monte e execute um circuito quântico em poucos passos, sem escrever código.",
+      "steps": {
+        "palette": {
+          "title": "Escolha os blocos",
+          "body": "Arraste portas da paleta à esquerda (Hadamard, CNOT, Measure…) para o canvas. Clique com o botão direito no canvas para buscar um bloco pelo nome."
+        },
+        "connect": {
+          "title": "Conecte na ordem",
+          "body": "Ligue a saída de um bloco à entrada do próximo. As conexões definem a ordem em que as operações acontecem."
+        },
+        "properties": {
+          "title": "Ajuste as propriedades",
+          "body": "Selecione um bloco para escolher o qubit, o bit clássico ou o número de shots no painel lateral."
+        },
+        "run": {
+          "title": "Termine com Run",
+          "body": "Coloque Measure nos qubits, depois Run (Aer Simulator) e, se quiser o gráfico, Plot Histogram. Clique em ▶ para executar."
+        },
+        "console": {
+          "title": "Leia o resultado",
+          "body": "A aba Console mostra a saída enquanto o script roda e o histograma no fim. Use ■ para parar uma execução longa."
+        },
+        "save": {
+          "title": "Seu trabalho é salvo sozinho",
+          "body": "O projeto é salvo automaticamente. Quando estiver pronto, use Publicar no Vault para compartilhar."
+        }
+      },
+      "shortcuts": "Atalhos: Ctrl+Z desfaz, Ctrl+Shift+Z refaz, Delete apaga o bloco selecionado."
+    },
+    "emptyCanvas": {
+      "title": "Seu circuito começa aqui",
+      "subtitle": "O canvas está vazio. Comece por um exemplo pronto ou monte o seu:",
+      "step1": "Arraste blocos da paleta à esquerda para cá.",
+      "step2": "Conecte os blocos na ordem em que devem rodar.",
+      "step3": "Termine com Measure → Run e clique em ▶.",
+      "loadExample": "Carregar exemplo: estado de Bell",
+      "openGuide": "Ver guia rápido",
+      "exampleHint": "O estado de Bell entrelaça dois qubits: o histograma mostra só 00 e 11. Dá para desfazer com Ctrl+Z."
     }
   },
   "profile": {
@@ -509,5 +553,64 @@
       "editPrice": "Alterar preço",
       "savePrice": "Salvar preço"
     }
+  },
+  "feedback": {
+    "button": "Feedback",
+    "title": "Envie sua opinião",
+    "description": "Conte o que funcionou, o que confundiu ou o que faltou. Isso orienta as próximas melhorias.",
+    "ratingLabel": "Como está sendo sua experiência? (opcional)",
+    "ratingValue": "{n} de 5",
+    "messageLabel": "Comentário",
+    "messagePlaceholder": "Ex.: não encontrei onde ver o resultado da execução…",
+    "send": "Enviar",
+    "cancel": "Cancelar",
+    "thanks": "Obrigado pelo feedback!",
+    "failed": "Não foi possível enviar. Tente de novo.",
+    "rateLimited": "Você enviou muitos feedbacks na última hora. Tente mais tarde."
+  },
+  "home": {
+    "eyebrow": "Computação quântica sem código",
+    "title": "Monte circuitos quânticos arrastando blocos",
+    "subtitle": "O Node-Forge é uma IDE visual para Qiskit: arraste portas, conecte, clique em ▶ e veja o resultado em segundos, com o código Python gerado para você.",
+    "ctaRegister": "Criar conta grátis",
+    "ctaLogin": "Entrar",
+    "ctaVault": "Explorar o Node Vault",
+    "audience": "Feito para estudantes e curiosos que estão começando em computação quântica.",
+    "sketchCaption": "Estado de Bell: o primeiro circuito que você roda no editor.",
+    "howTitle": "Como funciona",
+    "steps": {
+      "drag": {
+        "title": "Arraste",
+        "body": "Escolha portas quânticas na paleta e solte no canvas."
+      },
+      "connect": {
+        "title": "Conecte",
+        "body": "Ligue os blocos na ordem em que as operações acontecem."
+      },
+      "run": {
+        "title": "Execute",
+        "body": "Clique em ▶: o circuito roda num simulador isolado e o histograma aparece no Console."
+      }
+    },
+    "featuresTitle": "O que mais você encontra",
+    "features": {
+      "sandbox": {
+        "title": "Execução segura",
+        "body": "Cada execução roda num container isolado, sem rede e com limite de tempo."
+      },
+      "terminal": {
+        "title": "Terminal Python",
+        "body": "Um REPL de verdade, com as variáveis e funções do seu arquivo já carregadas."
+      },
+      "results": {
+        "title": "Resultados na hora",
+        "body": "Saída do script enquanto roda e histogramas no fim de cada execução."
+      },
+      "vault": {
+        "title": "Node Vault",
+        "body": "Publique seus circuitos e clone os da comunidade."
+      }
+    },
+    "finalCta": "Pronto para rodar seu primeiro circuito?"
   }
 }

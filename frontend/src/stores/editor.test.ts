@@ -175,3 +175,23 @@ describe("deleteNode", () => {
     expect(store().selectedNodeId).toBeNull();
   });
 });
+
+describe("loadTemplate", () => {
+  it("replaces the canvas in one undoable step and marks dirty", () => {
+    hydrateWith([node("old")]);
+    store().loadTemplate({
+      nodes: [node("a"), node("b")],
+      edges: [{ id: "e", source: "a", target: "b" }],
+      config: { num_qubits: 3, num_classical: 3, shots: 500 },
+    });
+    expect(store().nodes.map((n) => n.id)).toEqual(["a", "b"]);
+    expect(store().edges).toHaveLength(1);
+    expect(store().config.num_qubits).toBe(3);
+    expect(store().saveStatus).toBe("dirty");
+
+    store().undo();
+    expect(store().nodes.map((n) => n.id)).toEqual(["old"]);
+    expect(store().edges).toHaveLength(0);
+    expect(store().config).toEqual(DEFAULT_CONFIG);
+  });
+});

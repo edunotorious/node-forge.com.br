@@ -199,7 +199,7 @@ class ExecutionJob(Base):
     # CHECK rather than an ALTER TYPE dance.
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued','running','succeeded','failed','timeout','error')",
+            "status IN ('queued','running','succeeded','failed','timeout','error','cancelled')",
             name="execution_jobs_status_check",
         ),
         Index(
@@ -350,3 +350,30 @@ class VaultComment(Base):
     deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
 
     author: Mapped["User | None"] = relationship("User", foreign_keys=[author_id])
+
+
+class Feedback(Base):
+    """In-app feedback (the "Feedback" button). Collected during usability
+    tests and afterwards; read with SQL, there is no admin UI. The user is
+    kept nullable so deleting an account keeps the anonymous feedback."""
+
+    __tablename__ = "feedback"
+    __table_args__ = (
+        CheckConstraint(
+            "rating IS NULL OR (rating BETWEEN 1 AND 5)", name="ck_feedback_rating_range"
+        ),
+        Index("idx_feedback_created", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    # Path of the page the user was on (e.g. /projects/<id>), to place the
+    # feedback in context. Never a full URL with query strings.
+    page: Mapped[str] = mapped_column(String(200), nullable=False, server_default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

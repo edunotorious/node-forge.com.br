@@ -1,16 +1,23 @@
 "use client";
 
-import { CheckCircle2, Loader2, TriangleAlert, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  CircleStop,
+  Loader2,
+  TriangleAlert,
+  XCircle,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 
 import type { ExecutionJob, JobStatus } from "@/lib/graph-types";
 import { cn } from "@/lib/utils";
 import { useEditor } from "@/stores/editor";
 
-// Console tab: shows the result of the most recent run for the active
-// project. Empty state until the user clicks ▶. When a run is in flight,
-// the run controls flip to a spinner and we render a "running" placeholder
-// here so the user has somewhere to look while they wait.
+// Console tab: shows the most recent run for the active file. While a run
+// is in flight the job is re-polled every 500 ms and the backend fills in
+// the partial stdout/stderr, so output appears as the script prints it,
+// next to a live elapsed-time counter.
 export function ConsoleView() {
   const t = useTranslations("editor.console");
   const job = useEditor((s) => s.lastJob);
@@ -32,12 +39,23 @@ export function ConsoleView() {
     <div className="space-y-3">
       <header className="flex items-center gap-2 text-xs">
         <StatusBadge status={job.status} />
-        {job.started_at && job.finished_at && (
-          <span className="text-muted-foreground">
-            {t("elapsed", { ms: elapsedMs(job) })}
-          </span>
+        {job.status === "queued" || job.status === "running" ? (
+          <LiveElapsed since={job.started_at ?? job.created_at} />
+        ) : (
+          job.started_at &&
+          job.finished_at && (
+            <span className="text-muted-foreground">
+              {t("elapsed", { ms: elapsedMs(job) })}
+            </span>
+          )
         )}
       </header>
+
+      {(job.status === "queued" || job.status === "running") &&
+        !job.stdout &&
+        !job.stderr && (
+          <p className="text-muted-foreground italic">{t("waitingOutput")}</p>
+        )}
 
       {job.error_message && (
         <pre className="whitespace-pre-wrap rounded bg-destructive/10 p-2 text-destructive">
@@ -129,6 +147,11 @@ function StatusBadge({ status }: { status: JobStatus }) {
       label: t("exitError"),
       tone: "text-destructive",
     },
+    cancelled: {
+      icon: <CircleStop className="h-3.5 w-3.5" />,
+      label: t("exitCancelled"),
+      tone: "text-amber-600",
+    },
   };
   const entry = map[status];
   return (
@@ -136,6 +159,18 @@ function StatusBadge({ status }: { status: JobStatus }) {
       {entry.icon} {entry.label}
     </span>
   );
+}
+
+// Seconds since the run started, ticking once a second.
+function LiveElapsed({ since }: { since: string }) {
+  const t = useTranslations("editor.console");
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const seconds = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000));
+  return <span className="text-muted-foreground">{t("elapsedLive", { seconds })}</span>;
 }
 
 function elapsedMs(job: ExecutionJob): number {

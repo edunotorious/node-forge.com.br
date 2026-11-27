@@ -1,6 +1,6 @@
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -29,6 +29,9 @@ _settings = get_settings()
 # REPL never hits them in normal use; job polling stays unlimited.
 _run_limit = per_user_limit("run", "20/minute")
 _terminal_limit = per_user_limit("terminal", "60/minute")
+
+# Live-log reads and stop requests are tiny; never let them hang a poll.
+LIVE_LOGS_TIMEOUT_SECONDS = 3.0
 
 
 async def _get_owned_file(
@@ -60,9 +63,10 @@ async def _run_in_background(job_id: uuid.UUID, code: str) -> None:
     to see the result.
     """
     async with SessionLocal() as session:
-        job = await session.get(ExecutionJob, job_id)
-        if job is None:
-            return  # cancelled / already cleaned up — give up silently
+        job = await session.get(ExecutionJob, job_id, with_for_update=True)
+        if job is None or job.status != "queued":
+            # Gone, or the user pressed Stop before the run even started.
+            return
 
         job.status = "running"
         job.started_at = datetime.now(UTC)
@@ -72,26 +76,45 @@ async def _run_in_background(job_id: uuid.UUID, code: str) -> None:
         # teardown. The executor itself wall-clocks the run; this is just so
         # we don't drop the connection mid-handshake.
         timeout = _settings.executor_timeout_seconds + 10
+        result: dict[str, Any] = {}
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 res = await client.post(
                     f"{_settings.executor_url}/run",
-                    json={"code": code},
-                    headers={"X-Internal-API-Token": _settings.internal_api_token},
+                    # run_id labels the runner container, so Stop and the
+                    # live-output polling can find it while it runs.
+                    json={"code": code, "run_id": str(job_id)},
+                    headers=_executor_headers(),
                 )
             res.raise_for_status()
             payload = res.json()
-            job.status = payload.get("status", "error")
-            job.stdout = payload.get("stdout", "")
-            job.stderr = payload.get("stderr", "")
-            job.artifacts_json = payload.get("artifacts", [])
-            job.error_message = payload.get("error_message")
+            result = {
+                "status": payload.get("status", "error"),
+                "stdout": payload.get("stdout", ""),
+                "stderr": payload.get("stderr", ""),
+                "artifacts_json": payload.get("artifacts", []),
+                "error_message": payload.get("error_message"),
+            }
         except httpx.HTTPError as exc:
-            job.status = "error"
-            job.error_message = f"Executor call failed: {exc}"
+            result = {"status": "error", "error_message": f"Executor call failed: {exc}"}
 
-        job.finished_at = datetime.now(UTC)
+        # Re-read under a row lock: a Stop may have landed while the run was
+        # in flight. A cancelled job keeps its status and message but still
+        # gets whatever output the script produced before it was killed.
+        await session.refresh(job, with_for_update=True)
+        if job.status == "cancelled":
+            for key in ("stdout", "stderr", "artifacts_json"):
+                if key in result:
+                    setattr(job, key, result[key])
+        else:
+            for key, value in result.items():
+                setattr(job, key, value)
+            job.finished_at = datetime.now(UTC)
         await session.commit()
+
+
+def _executor_headers() -> dict[str, str]:
+    return {"X-Internal-API-Token": _settings.internal_api_token}
 
 
 @router.post(
@@ -136,10 +159,67 @@ async def get_job(
     job_id: uuid.UUID,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> ExecutionJob:
+) -> JobResponse:
     job = await session.get(ExecutionJob, job_id)
     if job is None or job.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    response = JobResponse.model_validate(job)
+    if job.status == "running":
+        # The executor only returns output when the script exits; ask it
+        # for the partial logs so the console fills in while it runs.
+        live = await _live_logs(job.id)
+        if live is not None:
+            response = response.model_copy(update=live)
+    return response
+
+
+async def _live_logs(job_id: uuid.UUID) -> dict[str, str] | None:
+    """Best effort: a slow or failing executor never breaks job polling."""
+    try:
+        async with httpx.AsyncClient(timeout=LIVE_LOGS_TIMEOUT_SECONDS) as client:
+            res = await client.get(
+                f"{_settings.executor_url}/runs/{job_id}/logs",
+                headers=_executor_headers(),
+            )
+        res.raise_for_status()
+        payload = res.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    return {"stdout": payload.get("stdout", ""), "stderr": payload.get("stderr", "")}
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=JobResponse)
+async def cancel_job(
+    job_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ExecutionJob:
+    """The editor's Stop button. Marks the job cancelled, then asks the
+    executor to kill the runner container. A job that already finished is
+    returned unchanged (the user clicked Stop just as it ended)."""
+    job = await session.get(ExecutionJob, job_id, with_for_update=True)
+    if job is None or job.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    if job.status not in ("queued", "running"):
+        await session.commit()  # release the row lock
+        return job
+
+    job.status = "cancelled"
+    job.error_message = "Execution stopped by the user"
+    job.finished_at = datetime.now(UTC)
+    await session.commit()
+    await session.refresh(job)
+
+    try:
+        async with httpx.AsyncClient(timeout=LIVE_LOGS_TIMEOUT_SECONDS) as client:
+            await client.post(
+                f"{_settings.executor_url}/runs/{job_id}/stop",
+                headers=_executor_headers(),
+            )
+    except httpx.HTTPError:
+        # The container still dies at the executor timeout; the job is
+        # already cancelled from the user's point of view.
+        pass
     return job
 
 
@@ -273,7 +353,7 @@ async def terminal(
             res = await client.post(
                 f"{_settings.executor_url}/run",
                 json={"code": script},
-                headers={"X-Internal-API-Token": _settings.internal_api_token},
+                headers=_executor_headers(),
             )
         res.raise_for_status()
         payload = res.json()

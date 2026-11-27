@@ -5,6 +5,7 @@ import { UserRound } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Wordmark } from "@/components/brand/wordmark";
+import { FeedbackButton } from "@/components/feedback-dialog";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { Button } from "@/components/ui/button";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -36,33 +37,35 @@ export function TopBar({ user }: TopBarProps) {
 
   return (
     <header className="bg-nav text-nav-foreground sticky top-0 z-50">
-      <div className="flex h-12 items-center justify-between gap-4 px-4 sm:px-6">
+      <div className="flex h-12 items-center justify-between gap-3 px-4 sm:gap-4 sm:px-6">
         <Link
-          href={user ? "/projects" : "/vault"}
+          href={user ? "/projects" : "/"}
           aria-label="Node-Forge"
           className="shrink-0 transition-opacity hover:opacity-80"
         >
-          <Wordmark size="md" />
+          <Wordmark size="md" className="h-4 sm:h-6" />
         </Link>
 
-        <nav className="flex items-center gap-4 text-sm font-medium">
+        <nav className="flex items-center gap-3 whitespace-nowrap text-sm font-medium sm:gap-4">
           <Link href="/vault" className="transition-opacity hover:opacity-80">
             {t("nav.nodeVault")}
           </Link>
           {user ? (
             <>
-              <span className="opacity-40">|</span>
+              <span className="hidden opacity-40 sm:inline">|</span>
               <Link
                 href="/projects"
                 className="transition-opacity hover:opacity-80"
               >
                 {t("nav.projects")}
               </Link>
+              <span className="hidden opacity-40 sm:inline">|</span>
+              <FeedbackButton />
             </>
           ) : null}
-          <span className="opacity-40">|</span>
+          <span className="hidden opacity-40 sm:inline">|</span>
           <LanguageSwitcher />
-          <span className="opacity-40">|</span>
+          <span className="hidden opacity-40 sm:inline">|</span>
 
           {user ? (
             <>
@@ -105,7 +108,9 @@ export function TopBar({ user }: TopBarProps) {
               </Link>
               <Link
                 href="/register"
-                className="rounded-full bg-primary px-3 py-1 text-primary-foreground transition-opacity hover:opacity-90"
+                // On phones the home page already carries a big sign-up CTA;
+                // dropping the pill keeps the bar from overflowing.
+                className="hidden rounded-full bg-primary px-3 py-1 text-primary-foreground transition-opacity hover:opacity-90 sm:inline-block"
               >
                 {t("auth.register.title")}
               </Link>

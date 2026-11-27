@@ -63,8 +63,12 @@ interface State {
   leftTab: LeftTab;
   bottomTab: BottomTab;
   bottomPanelCollapsed: boolean;
+  // Quick guide dialog (help button + empty-canvas link).
+  guideOpen: boolean;
   lastJob: ExecutionJob | null;
   isRunning: boolean;
+  // Stop was pressed and the cancel request is in flight.
+  isStopping: boolean;
   // Undo / redo stacks. past[past.length - 1] is the most recent snapshot
   // to roll back to; future[0] is the next thing to redo.
   past: Snapshot[];
@@ -109,6 +113,9 @@ interface Actions {
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (conn: Connection) => void;
   addNode: (node: Node) => void;
+  // Replace the canvas with a ready-made circuit (onboarding example), as
+  // one undo step so Ctrl+Z brings the previous canvas back.
+  loadTemplate: (data: { nodes: Node[]; edges: Edge[]; config: GraphConfig }) => void;
   updateNodeData: (nodeId: string, patch: Record<string, unknown>) => void;
   // Remove a node plus every edge touching it, as one undo step.
   deleteNode: (nodeId: string) => void;
@@ -129,8 +136,10 @@ interface Actions {
   setLeftTab: (tab: LeftTab) => void;
   setBottomTab: (tab: BottomTab) => void;
   toggleBottomPanel: () => void;
+  setGuideOpen: (open: boolean) => void;
   setLastJob: (job: ExecutionJob | null) => void;
   setIsRunning: (running: boolean) => void;
+  setIsStopping: (stopping: boolean) => void;
   // History controls. canUndo / canRedo are derived selectors so the
   // EditorTopBar can disable its buttons accordingly.
   undo: () => void;
@@ -155,8 +164,10 @@ const INITIAL: State = {
   leftTab: "details",
   bottomTab: "console",
   bottomPanelCollapsed: false,
+  guideOpen: false,
   lastJob: null,
   isRunning: false,
+  isStopping: false,
   past: [],
   future: [],
   historyGroup: null,
@@ -302,6 +313,15 @@ export const useEditor = create<State & Actions>((set) => ({
       nodes: [...s.nodes, node],
       saveStatus: "dirty",
     })),
+  loadTemplate: (data) =>
+    set((s) => ({
+      ..._pushHistory(s),
+      nodes: data.nodes,
+      edges: data.edges,
+      config: data.config,
+      selectedNodeId: null,
+      saveStatus: "dirty",
+    })),
   updateNodeData: (id, patch) =>
     set((s) => ({
       ..._pushHistory(s, `node:${id}`),
@@ -399,10 +419,13 @@ export const useEditor = create<State & Actions>((set) => ({
     })),
   setLeftTab: (tab) => set({ leftTab: tab }),
   setBottomTab: (tab) => set({ bottomTab: tab, bottomPanelCollapsed: false }),
+  setGuideOpen: (open) => set({ guideOpen: open }),
   toggleBottomPanel: () =>
     set((s) => ({ bottomPanelCollapsed: !s.bottomPanelCollapsed })),
   setLastJob: (job) => set({ lastJob: job }),
-  setIsRunning: (running) => set({ isRunning: running }),
+  setIsRunning: (running) =>
+    set(running ? { isRunning: true } : { isRunning: false, isStopping: false }),
+  setIsStopping: (stopping) => set({ isStopping: stopping }),
   undo: () =>
     set((s) => {
       if (s.past.length === 0) return s;
