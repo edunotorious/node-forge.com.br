@@ -133,7 +133,11 @@
     "projectNamePlaceholder": "Project name",
     "save": "Save",
     "publishToVault": "Publish to Vault",
-    "run": "Run",
+    "run": {
+      "failed": "Run failed",
+      "rateLimited": "Too many runs in a short time. Wait a minute and try again.",
+      "stopFailed": "Could not stop the run"
+    },
     "runDisabledTooltip": "Available in Phase 7",
     "autosaveFailed": "Failed to save project",
     "status": {
@@ -255,13 +259,12 @@
     },
     "runControls": {
       "play": "Run",
-      "pause": "Pause",
-      "stop": "Stop",
-      "comingSoon": "Coming soon",
-      "running": "Running..."
+      "stop": "Stop run",
+      "running": "Running...",
+      "stopIdle": "Nothing running"
     },
     "console": {
-      "empty": "No runs yet. Click ▶ to execute the circuit.",
+      "empty": "No runs yet. Click ▶ (right side of the file bar) to run the circuit.",
       "running": "Running…",
       "exitOk": "Done",
       "exitFailed": "Failed",
@@ -270,11 +273,10 @@
       "stdout": "stdout",
       "stderr": "stderr",
       "artifacts": "Artifacts",
-      "elapsed": "Time: {ms}ms"
-    },
-    "run": {
-      "failed": "Run failed",
-      "rateLimited": "Too many runs in a short time. Wait a minute and try again."
+      "elapsed": "Time: {ms}ms",
+      "exitCancelled": "Stopped",
+      "elapsedLive": "Running for {seconds}s",
+      "waitingOutput": "Waiting for script output… (the first run may take a few seconds)"
     },
     "files": {
       "addAria": "Add new file",
@@ -297,6 +299,48 @@
       "emptySelection": "Click a node on the canvas to view/edit its properties.",
       "type": "Type:",
       "id": "id:"
+    },
+    "guide": {
+      "open": "Quick guide",
+      "title": "Editor quick guide",
+      "intro": "Build and run a quantum circuit in a few steps, without writing code.",
+      "steps": {
+        "palette": {
+          "title": "Pick the blocks",
+          "body": "Drag gates from the palette on the left (Hadamard, CNOT, Measure…) onto the canvas. Right-click the canvas to search a block by name."
+        },
+        "connect": {
+          "title": "Connect them in order",
+          "body": "Link one block's output to the next block's input. Connections set the order the operations run in."
+        },
+        "properties": {
+          "title": "Tune the properties",
+          "body": "Select a block to choose its qubit, classical bit or number of shots in the side panel."
+        },
+        "run": {
+          "title": "Finish with Run",
+          "body": "Add Measure on the qubits, then Run (Aer Simulator) and, for the chart, Plot Histogram. Click ▶ to run."
+        },
+        "console": {
+          "title": "Read the result",
+          "body": "The Console tab shows output while the script runs and the histogram at the end. Use ■ to stop a long run."
+        },
+        "save": {
+          "title": "Your work saves itself",
+          "body": "The project is saved automatically. When it is ready, use Publish to Vault to share it."
+        }
+      },
+      "shortcuts": "Shortcuts: Ctrl+Z undo, Ctrl+Shift+Z redo, Delete removes the selected block."
+    },
+    "emptyCanvas": {
+      "title": "Your circuit starts here",
+      "subtitle": "The canvas is empty. Start from a ready-made example or build your own:",
+      "step1": "Drag blocks from the palette on the left onto here.",
+      "step2": "Connect the blocks in the order they should run.",
+      "step3": "Finish with Measure → Run and click ▶.",
+      "loadExample": "Load example: Bell state",
+      "openGuide": "Open quick guide",
+      "exampleHint": "The Bell state entangles two qubits: the histogram shows only 00 and 11. Ctrl+Z undoes it."
     }
   },
   "profile": {
@@ -509,5 +553,64 @@
       "editPrice": "Change price",
       "savePrice": "Save price"
     }
+  },
+  "feedback": {
+    "button": "Feedback",
+    "title": "Send us your feedback",
+    "description": "Tell us what worked, what was confusing or what was missing. It shapes the next improvements.",
+    "ratingLabel": "How is your experience so far? (optional)",
+    "ratingValue": "{n} out of 5",
+    "messageLabel": "Comment",
+    "messagePlaceholder": "E.g. I could not find where to see the run result…",
+    "send": "Send",
+    "cancel": "Cancel",
+    "thanks": "Thanks for the feedback!",
+    "failed": "Could not send it. Please try again.",
+    "rateLimited": "You sent a lot of feedback in the last hour. Please try later."
+  },
+  "home": {
+    "eyebrow": "Quantum computing, no code required",
+    "title": "Build quantum circuits by dragging blocks",
+    "subtitle": "Node-Forge is a visual IDE for Qiskit: drag gates, connect them, click ▶ and see the result in seconds, with the Python code generated for you.",
+    "ctaRegister": "Create a free account",
+    "ctaLogin": "Sign in",
+    "ctaVault": "Explore the Node Vault",
+    "audience": "Made for students and curious minds getting started with quantum computing.",
+    "sketchCaption": "Bell state: the first circuit you run in the editor.",
+    "howTitle": "How it works",
+    "steps": {
+      "drag": {
+        "title": "Drag",
+        "body": "Pick quantum gates from the palette and drop them on the canvas."
+      },
+      "connect": {
+        "title": "Connect",
+        "body": "Link the blocks in the order the operations happen."
+      },
+      "run": {
+        "title": "Run",
+        "body": "Click ▶: the circuit runs in an isolated simulator and the histogram shows up in the Console."
+      }
+    },
+    "featuresTitle": "What else is there",
+    "features": {
+      "sandbox": {
+        "title": "Safe execution",
+        "body": "Every run happens in an isolated container, with no network and a time limit."
+      },
+      "terminal": {
+        "title": "Python terminal",
+        "body": "A real REPL, with your file's variables and functions already loaded."
+      },
+      "results": {
+        "title": "Instant results",
+        "body": "Script output while it runs and histograms at the end of every run."
+      },
+      "vault": {
+        "title": "Node Vault",
+        "body": "Publish your circuits and clone the community's."
+      }
+    },
+    "finalCta": "Ready to run your first circuit?"
   }
 }

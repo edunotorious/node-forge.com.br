@@ -59,7 +59,10 @@ automático a cada push na `main` (ver [Deploy em produção](#deploy-em-produç
 - **Profile completo**: avatar upload (PNG/JPEG/WebP/GIF, até 2 MB), Vault profile (nome, bio, site, redes sociais, país), edição inline
 - **Projects**: grid de cards, duplicar projeto (clona arquivos), upload de thumbnail, rename, delete, context menu por click direito
 - **i18n**: UI completamente bilíngue (PT-BR + EN) via next-intl, language switcher no header
-- **Async runs**: polling do `GET /jobs/:id` para circuitos longos não travarem a conexão
+- **Async runs**: polling do `GET /jobs/:id` para circuitos longos não travarem a conexão; durante a execução o Console mostra o stdout/stderr parcial e o tempo decorrido
+- **Parar execução**: o botão ■ mata o container do run em andamento (`POST /jobs/:id/cancel`) e o job fica como `cancelled`, com a saída produzida até ali
+- **Onboarding**: página inicial pública em `/` explicando o produto; canvas vazio oferece o exemplo pronto do estado de Bell e um **Guia rápido** (também no botão do topo do editor)
+- **Feedback dentro da app**: botão **Feedback** no topo (usuários logados) com nota de 1 a 5 e comentário, salvo na tabela `feedback` junto da página de origem — ver [Lendo os feedbacks](#lendo-os-feedbacks)
 - **Testes automatizados**: pytest no backend, Vitest no frontend e Playwright E2E ponta a ponta (ver [Testes](#testes))
 - **Segurança**: CSP, HSTS, X-Frame-Options, Referrer-Policy e Permissions-Policy em todas as respostas; proxy BFF que valida o caminho e a origem antes de repassar ao backend; redirect pós-login restrito a caminhos internos
 
@@ -429,6 +432,18 @@ docker compose exec frontend pnpm test
 uv run --project backend ruff check backend/src/
 ```
 
+### Lendo os feedbacks
+
+Os envios do botão **Feedback** ficam na tabela `feedback` (não há tela de
+administração). Para listar os mais recentes:
+
+```bash
+docker compose exec postgres psql -U postgres -d nodeforge -c \
+  "SELECT f.created_at, u.email, f.rating, f.page, f.message
+     FROM feedback f LEFT JOIN users u ON u.id = f.user_id
+    ORDER BY f.created_at DESC LIMIT 50;"
+```
+
 ---
 
 ## Testes
@@ -711,6 +726,7 @@ Docker, ou uma VM descartável por execução).
 - ✅ Profile com avatar upload (PNG/JPEG/WebP/GIF)
 - ✅ Projects com duplicar, rename, thumbnail upload, context menu
 - ✅ UI bilíngue PT-BR + EN
+- ✅ Melhorias de usabilidade: página inicial, exemplo de Bell e guia rápido no editor, botão Parar real, saída ao vivo no Console e botão de Feedback
 - ✅ Node Vault como marketplace: grátis/pago, vitrine com categorias, filtros e destaques
 - ✅ Suítes pytest, Vitest e Playwright
 - ✅ CI/CD GitHub Actions (lint + typecheck + testes + build + e2e em todo PR)
@@ -721,8 +737,7 @@ Docker, ou uma VM descartável por execução).
 ### Em planejamento
 
 - **Checkout dos projetos pagos** do Vault (gateway a definir) e liberação do clone após a compra
-- Pause / Stop reais no botão de run (hoje são stubs visuais)
-- Stream de stdout em tempo real (WebSocket) — hoje vem em batch no final
+- Stream de stdout por WebSocket (hoje o Console atualiza a saída parcial por polling a cada 500 ms)
 - Mais nodos no catálogo (Toffoli, SWAP, gates parametrizados RX/RY/RZ, classical control)
 - Welcome email no register
 - Variables/Functions integrando como nodos no canvas (drag-to-call)

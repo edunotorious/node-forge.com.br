@@ -36,6 +36,7 @@ os.environ.setdefault("COOKIE_SECURE", "false")
 os.environ.setdefault("EMAIL_BACKEND", "stdout")
 os.environ.setdefault("APP_BASE_URL", "http://localhost:3000")
 
+import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy.ext.asyncio import (  # noqa: E402
@@ -101,3 +102,17 @@ async def client(engine) -> AsyncGenerator[AsyncClient, None]:
             yield ac
     finally:
         app.dependency_overrides.pop(get_session, None)
+
+
+@pytest.fixture
+def limits_on():
+    """Re-enable the limiter (conftest disables it) with empty buckets."""
+    from src.auth import rate_limit as rl
+
+    rl.limiter.enabled = True
+    rl.limiter.reset()
+    try:
+        yield
+    finally:
+        rl.limiter.enabled = False
+        rl.limiter.reset()

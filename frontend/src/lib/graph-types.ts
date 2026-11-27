@@ -126,7 +126,8 @@ export type JobStatus =
   | "succeeded"
   | "failed"
   | "timeout"
-  | "error";
+  | "error"
+  | "cancelled";
 
 export interface JobArtifact {
   kind: string;

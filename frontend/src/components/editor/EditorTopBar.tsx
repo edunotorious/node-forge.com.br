@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeft, Loader2, Save, Upload } from "lucide-react";
+import { ArrowLeft, CircleHelp, Loader2, Save, Upload } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 
+import { QuickGuideDialog } from "@/components/editor/QuickGuideDialog";
 import { PublishToVaultDialog } from "@/components/vault/publish-dialog";
 import { useEditor, type SaveStatus } from "@/stores/editor";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,7 @@ export function EditorTopBar({
   const saveStatus = useEditor((s) => s.saveStatus);
   const lastSavedAt = useEditor((s) => s.lastSavedAt);
   const [publishOpen, setPublishOpen] = useState(false);
+  const setGuideOpen = useEditor((s) => s.setGuideOpen);
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b bg-background px-3">
@@ -79,6 +81,9 @@ export function EditorTopBar({
       />
       <StatusLabel status={saveStatus} lastSavedAt={lastSavedAt} />
       <div className="ml-auto flex items-center gap-2">
+        <Button variant="ghost" size="sm" onClick={() => setGuideOpen(true)}>
+          <CircleHelp className="mr-1 h-4 w-4" /> {t("guide.open")}
+        </Button>
         <Button
           variant="outline"
           size="sm"
@@ -105,6 +110,7 @@ export function EditorTopBar({
           beforePublish={flushSave}
         />
       ) : null}
+      <QuickGuideDialog />
     </header>
   );
 }

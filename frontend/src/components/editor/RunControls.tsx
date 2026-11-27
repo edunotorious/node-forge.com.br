@@ -1,17 +1,24 @@
 "use client";
 
-import { Loader2, Pause, Play, Square } from "lucide-react";
+import { Loader2, Play, Square } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { cn } from "@/lib/utils";
 import { useEditor } from "@/stores/editor";
 
-// Run controls — Play wires to the executor (Phase 7). Pause/Stop are
-// visual stubs for now (paused/stopped jobs aren't a thing yet on the
-// backend).
-export function RunControls({ onRun }: { onRun: () => void }) {
+// Run controls. Play saves and runs the active file; Stop kills the run in
+// flight (POST /jobs/:id/cancel). There is no Pause: a sandboxed script
+// cannot be resumed meaningfully and the disabled stub only confused users.
+export function RunControls({
+  onRun,
+  onStop,
+}: {
+  onRun: () => void;
+  onStop: () => void;
+}) {
   const t = useTranslations("editor.runControls");
   const isRunning = useEditor((s) => s.isRunning);
+  const isStopping = useEditor((s) => s.isStopping);
   const projectId = useEditor((s) => s.projectId);
   const fileId = useEditor((s) => s.fileId);
   const ready = !!projectId && !!fileId;
@@ -19,17 +26,17 @@ export function RunControls({ onRun }: { onRun: () => void }) {
   return (
     <div className="flex items-center gap-1">
       <ControlButton
-        icon={<Pause className="h-3.5 w-3.5" />}
-        label={t("pause")}
-        title={t("comingSoon")}
-        disabled
-        className="text-muted-foreground"
-      />
-      <ControlButton
-        icon={<Square className="h-3.5 w-3.5 fill-current" />}
+        icon={
+          isStopping ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Square className="h-3.5 w-3.5 fill-current" />
+          )
+        }
         label={t("stop")}
-        title={t("comingSoon")}
-        disabled
+        title={isRunning ? t("stop") : t("stopIdle")}
+        disabled={!isRunning || isStopping}
+        onClick={onStop}
         className="text-destructive"
       />
       <ControlButton

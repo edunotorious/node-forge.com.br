@@ -35,11 +35,12 @@ interface Props {
   flushSave: () => Promise<void>;
   // Triggered by the Play button in the run controls.
   onRun: () => void;
+  onStop: () => void;
 }
 
 // Top tabs row inside the workspace: one tab per file in the project, a "+"
 // to add, and the run controls pinned to the right.
-export function FileTabsBar({ flushSave, onRun }: Props) {
+export function FileTabsBar({ flushSave, onRun, onStop }: Props) {
   const t = useTranslations("editor.files");
   const files = useEditor((s) => s.files);
   const activeFileId = useEditor((s) => s.fileId);
@@ -117,7 +118,7 @@ export function FileTabsBar({ flushSave, onRun }: Props) {
         </button>
       </div>
       <div className="flex items-center gap-1 pr-3">
-        <RunControls onRun={onRun} />
+        <RunControls onRun={onRun} onStop={onStop} />
       </div>
 
       <NewFileDialog

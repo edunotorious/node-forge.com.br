@@ -13,6 +13,7 @@ import { Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { CanvasEmptyState } from "@/components/editor/CanvasEmptyState";
 import { SearchNodePopup } from "@/components/editor/SearchNodePopup";
 import { useEditor } from "@/stores/editor";
 
@@ -166,7 +167,7 @@ export function Canvas() {
   );
 
   return (
-    <div className="flex-1" onDragOver={onDragOver} onDrop={onDrop}>
+    <div className="relative flex-1" onDragOver={onDragOver} onDrop={onDrop}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -186,6 +187,7 @@ export function Canvas() {
         <Controls />
         <MiniMap pannable zoomable />
       </ReactFlow>
+      {nodes.length === 0 && <CanvasEmptyState />}
       {search && (
         <SearchNodePopup
           screenX={search.screenX}

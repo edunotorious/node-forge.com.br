@@ -8,6 +8,7 @@ the module-level `SessionLocal`; we point it at the per-test engine.
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import Callable
 
 import httpx
@@ -15,6 +16,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.db.models import ExecutionJob
 from src.runner import routes as runner_routes
 from tests.helpers import create_project, login_as
 
@@ -168,20 +170,6 @@ async def test_terminal_executor_down_returns_error_payload(client: AsyncClient,
     assert res.json()["stderr"].startswith("Executor call failed:")
 
 
-@pytest.fixture
-def limits_on():
-    """Re-enable the limiter (conftest disables it) with empty buckets."""
-    from src.auth import rate_limit as rl
-
-    rl.limiter.enabled = True
-    rl.limiter.reset()
-    try:
-        yield
-    finally:
-        rl.limiter.enabled = False
-        rl.limiter.reset()
-
-
 async def test_run_is_rate_limited_per_user(client: AsyncClient, executor, limits_on) -> None:
     executor(lambda req: httpx.Response(200, json={"status": "succeeded"}))
     await login_as(client, "a@example.com")
@@ -241,3 +229,151 @@ async def test_terminal_surfaces_executor_error_message(client: AsyncClient, exe
         "stderr": "Executor is busy, try again in a few seconds",
         "status": "error",
     }
+
+
+# ---------- stop + live output ----------
+
+
+async def _insert_job(session: AsyncSession, client: AsyncClient, job_status: str) -> str:
+    """A job row in a given state, owned by the logged-in user."""
+    pid, _ = await _project_with_graph(client, BELL)
+    me = (await client.get("/auth/me")).json()
+    job = ExecutionJob(project_id=uuid.UUID(pid), user_id=uuid.UUID(me["id"]), status=job_status)
+    session.add(job)
+    await session.commit()
+    return str(job.id)
+
+
+async def test_run_sends_run_id_to_executor(client: AsyncClient, executor) -> None:
+    seen = executor(lambda req: httpx.Response(200, json={"status": "succeeded"}))
+    await login_as(client, "a@example.com")
+    pid, fid = await _project_with_graph(client, BELL)
+    job = (await client.post(f"/projects/{pid}/files/{fid}/run")).json()
+    assert json.loads(seen[0].content)["run_id"] == job["id"]
+
+
+async def test_cancel_running_job_stops_the_container(
+    client: AsyncClient, executor, session: AsyncSession
+) -> None:
+    seen = executor(lambda req: httpx.Response(200, json={"stopped": True}))
+    await login_as(client, "a@example.com")
+    job_id = await _insert_job(session, client, "running")
+
+    res = await client.post(f"/jobs/{job_id}/cancel")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "cancelled"
+    assert body["error_message"] == "Execution stopped by the user"
+    assert body["finished_at"]
+    assert [r.url.path for r in seen] == [f"/runs/{job_id}/stop"]
+    assert seen[0].headers["x-internal-api-token"] == "test-internal-token"
+
+
+async def test_cancel_survives_executor_down(
+    client: AsyncClient, executor, session: AsyncSession
+) -> None:
+    def boom(req: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=req)
+
+    executor(boom)
+    await login_as(client, "a@example.com")
+    job_id = await _insert_job(session, client, "running")
+    res = await client.post(f"/jobs/{job_id}/cancel")
+    assert res.status_code == 200
+    assert res.json()["status"] == "cancelled"
+
+
+async def test_cancel_finished_job_is_a_no_op(
+    client: AsyncClient, executor, session: AsyncSession
+) -> None:
+    seen = executor(lambda req: httpx.Response(200, json={"stopped": True}))
+    await login_as(client, "a@example.com")
+    job_id = await _insert_job(session, client, "succeeded")
+    res = await client.post(f"/jobs/{job_id}/cancel")
+    assert res.status_code == 200
+    assert res.json()["status"] == "succeeded"
+    assert seen == []
+
+
+async def test_cancel_job_of_other_user_is_404(
+    client: AsyncClient, executor, session: AsyncSession
+) -> None:
+    executor(lambda req: httpx.Response(200, json={"stopped": True}))
+    await login_as(client, "a@example.com")
+    job_id = await _insert_job(session, client, "running")
+    await login_as(client, "b@example.com")
+    assert (await client.post(f"/jobs/{job_id}/cancel")).status_code == 404
+
+
+async def test_job_cancelled_before_start_never_reaches_executor(
+    client: AsyncClient, executor, session: AsyncSession
+) -> None:
+    seen = executor(lambda req: httpx.Response(200, json={"status": "succeeded"}))
+    await login_as(client, "a@example.com")
+    job_id = await _insert_job(session, client, "cancelled")
+    await runner_routes._run_in_background(uuid.UUID(job_id), "print(1)")
+    assert seen == []
+    assert (await client.get(f"/jobs/{job_id}")).json()["status"] == "cancelled"
+
+
+async def test_stop_during_run_keeps_cancelled_status_and_output(
+    client: AsyncClient, executor, engine, session: AsyncSession
+) -> None:
+    await login_as(client, "a@example.com")
+    job_id = await _insert_job(session, client, "queued")
+    factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+    async def stop_mid_run(req: httpx.Request) -> httpx.Response:
+        # The user presses Stop while the executor is still running.
+        async with factory() as s:
+            job = await s.get(ExecutionJob, uuid.UUID(job_id))
+            job.status = "cancelled"
+            job.error_message = "Execution stopped by the user"
+            await s.commit()
+        return httpx.Response(
+            200,
+            json={
+                "status": "failed",
+                "stdout": "partial\n",
+                "stderr": "",
+                "artifacts": [],
+                "error_message": "Script exited with code 137",
+            },
+        )
+
+    executor(stop_mid_run)
+    await runner_routes._run_in_background(uuid.UUID(job_id), "print(1)")
+
+    polled = (await client.get(f"/jobs/{job_id}")).json()
+    assert polled["status"] == "cancelled"
+    assert polled["error_message"] == "Execution stopped by the user"
+    assert polled["stdout"] == "partial\n"
+
+
+async def test_polling_running_job_returns_live_output(
+    client: AsyncClient, executor, session: AsyncSession
+) -> None:
+    seen = executor(
+        lambda req: httpx.Response(
+            200, json={"running": True, "stdout": "step 1\n", "stderr": "warn\n"}
+        )
+    )
+    await login_as(client, "a@example.com")
+    job_id = await _insert_job(session, client, "running")
+
+    polled = (await client.get(f"/jobs/{job_id}")).json()
+    assert polled["status"] == "running"
+    assert polled["stdout"] == "step 1\n"
+    assert polled["stderr"] == "warn\n"
+    assert [r.url.path for r in seen] == [f"/runs/{job_id}/logs"]
+
+
+async def test_polling_survives_live_output_failure(
+    client: AsyncClient, executor, session: AsyncSession
+) -> None:
+    executor(lambda req: httpx.Response(500))
+    await login_as(client, "a@example.com")
+    job_id = await _insert_job(session, client, "running")
+    res = await client.get(f"/jobs/{job_id}")
+    assert res.status_code == 200
+    assert res.json()["stdout"] == ""

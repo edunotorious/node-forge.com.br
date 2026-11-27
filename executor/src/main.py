@@ -30,6 +30,7 @@ from __future__ import annotations
 import base64
 import io
 import os
+import re
 import tarfile
 import threading
 from typing import Annotated
@@ -80,14 +81,33 @@ def _client() -> docker.DockerClient:
         return _docker_client
 
 
+# Label that ties a runner container to the backend job driving it, so
+# the backend can read partial logs or kill the run while /run is still
+# blocked in wait().
+RUN_ID_LABEL = "nodeforge.run_id"
+RUN_ID_PATTERN = r"^[A-Za-z0-9-]{1,64}$"
+
+
 class RunRequest(BaseModel):
     code: str = Field(max_length=MAX_SCRIPT_BYTES)
+    # Optional: the terminal (REPL) does not track runs, only /run jobs do.
+    run_id: str | None = Field(default=None, pattern=RUN_ID_PATTERN)
 
 
 class Artifact(BaseModel):
     kind: str
     filename: str
     data_b64: str
+
+
+class LogsResponse(BaseModel):
+    running: bool
+    stdout: str
+    stderr: str
+
+
+class StopResponse(BaseModel):
+    stopped: bool
 
 
 class RunResponse(BaseModel):
@@ -169,6 +189,66 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def _check_token(token: str | None) -> None:
+    if not INTERNAL_TOKEN or token != INTERNAL_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid internal API token",
+        )
+
+
+def _find_run_container(run_id: str) -> Container | None:
+    if not re.match(RUN_ID_PATTERN, run_id):
+        return None
+    found = _client().containers.list(all=True, filters={"label": f"{RUN_ID_LABEL}={run_id}"})
+    return found[0] if found else None
+
+
+@app.get("/runs/{run_id}/logs", response_model=LogsResponse)
+def run_logs(
+    run_id: str,
+    x_internal_api_token: Annotated[str | None, Header()] = None,
+) -> LogsResponse:
+    """Partial stdout/stderr of a run still in flight, so the editor can
+    show output while the script runs instead of only at the end."""
+    _check_token(x_internal_api_token)
+    container = _find_run_container(run_id)
+    if container is None:
+        return LogsResponse(running=False, stdout="", stderr="")
+    try:
+        container.reload()
+        stdout = container.logs(stdout=True, stderr=False)
+        stderr = container.logs(stdout=False, stderr=True)
+        running = container.status in ("created", "running")
+    except NotFound:
+        return LogsResponse(running=False, stdout="", stderr="")
+    return LogsResponse(
+        running=running,
+        stdout=_truncate_bytes(stdout, MAX_OUTPUT_BYTES),
+        stderr=_truncate_bytes(stderr, MAX_OUTPUT_BYTES),
+    )
+
+
+@app.post("/runs/{run_id}/stop", response_model=StopResponse)
+def stop_run(
+    run_id: str,
+    x_internal_api_token: Annotated[str | None, Header()] = None,
+) -> StopResponse:
+    """Kill a run in flight. The /run call blocked in wait() then returns
+    with whatever output the script produced; the backend records the job
+    as cancelled."""
+    _check_token(x_internal_api_token)
+    container = _find_run_container(run_id)
+    if container is None:
+        return StopResponse(stopped=False)
+    try:
+        container.kill()
+    except Exception:
+        # Already exited (or removed) between the lookup and the kill.
+        return StopResponse(stopped=False)
+    return StopResponse(stopped=True)
+
+
 # Plain `def`, not `async def`: the docker SDK is blocking (wait() alone
 # can take TIMEOUT_SECONDS), so FastAPI must run this in its threadpool.
 # As a coroutine it froze the event loop, which serialized every run and
@@ -178,11 +258,7 @@ def run(
     req: RunRequest,
     x_internal_api_token: Annotated[str | None, Header()] = None,
 ) -> RunResponse:
-    if not INTERNAL_TOKEN or x_internal_api_token != INTERNAL_TOKEN:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid internal API token",
-        )
+    _check_token(x_internal_api_token)
 
     if not _run_slots.acquire(timeout=RUN_SLOT_WAIT_SECONDS):
         return RunResponse(
@@ -193,12 +269,12 @@ def run(
             error_message="Executor is busy, try again in a few seconds",
         )
     try:
-        return _run_in_sandbox(req.code)
+        return _run_in_sandbox(req.code, req.run_id)
     finally:
         _run_slots.release()
 
 
-def _run_in_sandbox(code: str) -> RunResponse:
+def _run_in_sandbox(code: str, run_id: str | None = None) -> RunResponse:
     client = _client()
 
     try:
@@ -230,6 +306,7 @@ def _run_in_sandbox(code: str) -> RunResponse:
             pids_limit=100,
             # `runc` (default) or `runsc` (gVisor) — see RUNNER_RUNTIME.
             runtime=RUNNER_RUNTIME,
+            labels={RUN_ID_LABEL: run_id} if run_id else {},
             detach=True,
         )
     except ImageNotFound as exc:
