@@ -62,7 +62,7 @@ automático a cada push na `main` (ver [Deploy em produção](#deploy-em-produç
 - **Async runs**: polling do `GET /jobs/:id` para circuitos longos não travarem a conexão; durante a execução o Console mostra o stdout/stderr parcial e o tempo decorrido
 - **Parar execução**: o botão ■ mata o container do run em andamento (`POST /jobs/:id/cancel`) e o job fica como `cancelled`, com a saída produzida até ali
 - **Onboarding**: página inicial pública em `/` explicando o produto; canvas vazio oferece o exemplo pronto do estado de Bell e um **Guia rápido** (também no botão do topo do editor)
-- **Feedback dentro da app**: botão **Feedback** no topo (usuários logados) com nota de 1 a 5 e comentário, salvo na tabela `feedback` junto da página de origem — ver [Lendo os feedbacks](#lendo-os-feedbacks)
+- **Feedbacks da comunidade**: página pública `/feedback` (link **Feedback** no topo) onde qualquer pessoa lê todos os feedbacks, com a nota média. Usuários logados publicam nota de 1 a 5 e comentário, podem publicar como anônimo e excluir os próprios. O autor aparece pelo nome de exibição/username, nunca pelo email — ver [Lendo os feedbacks](#lendo-os-feedbacks)
 - **Testes automatizados**: pytest no backend, Vitest no frontend e Playwright E2E ponta a ponta (ver [Testes](#testes))
 - **Segurança**: CSP, HSTS, X-Frame-Options, Referrer-Policy e Permissions-Policy em todas as respostas; proxy BFF que valida o caminho e a origem antes de repassar ao backend; redirect pós-login restrito a caminhos internos
 
@@ -434,12 +434,14 @@ uv run --project backend ruff check backend/src/
 
 ### Lendo os feedbacks
 
-Os envios do botão **Feedback** ficam na tabela `feedback` (não há tela de
-administração). Para listar os mais recentes:
+Todos os feedbacks são públicos em `/feedback` (API: `GET /feedback?limit=&offset=`,
+`POST /feedback`, `DELETE /feedback/{id}` só para o autor). A página de origem
+(`page`, de onde o usuário clicou em **Feedback**) e o autor real dos anônimos
+ficam só no banco, para a equipe. Para consultá-los:
 
 ```bash
 docker compose exec postgres psql -U postgres -d nodeforge -c \
-  "SELECT f.created_at, u.email, f.rating, f.page, f.message
+  "SELECT f.created_at, u.email, f.anonymous, f.rating, f.page, f.message
      FROM feedback f LEFT JOIN users u ON u.id = f.user_id
     ORDER BY f.created_at DESC LIMIT 50;"
 ```
@@ -726,7 +728,7 @@ Docker, ou uma VM descartável por execução).
 - ✅ Profile com avatar upload (PNG/JPEG/WebP/GIF)
 - ✅ Projects com duplicar, rename, thumbnail upload, context menu
 - ✅ UI bilíngue PT-BR + EN
-- ✅ Melhorias de usabilidade: página inicial, exemplo de Bell e guia rápido no editor, botão Parar real, saída ao vivo no Console e botão de Feedback
+- ✅ Melhorias de usabilidade: página inicial, exemplo de Bell e guia rápido no editor, botão Parar real, saída ao vivo no Console e mural público de feedbacks
 - ✅ Node Vault como marketplace: grátis/pago, vitrine com categorias, filtros e destaques
 - ✅ Suítes pytest, Vitest e Playwright
 - ✅ CI/CD GitHub Actions (lint + typecheck + testes + build + e2e em todo PR)

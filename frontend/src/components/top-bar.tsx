@@ -1,14 +1,13 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { UserRound } from "lucide-react";
+import { MessageSquareText, UserRound } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Wordmark } from "@/components/brand/wordmark";
-import { FeedbackButton } from "@/components/feedback-dialog";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { Button } from "@/components/ui/button";
-import { Link, useRouter } from "@/i18n/navigation";
+import { Link, usePathname, useRouter } from "@/i18n/navigation";
 
 interface TopBarProps {
   // null when the bar renders on a public page (Vault) and the visitor
@@ -23,6 +22,7 @@ interface TopBarProps {
 export function TopBar({ user }: TopBarProps) {
   const t = useTranslations();
   const router = useRouter();
+  const pathname = usePathname();
 
   const logout = useMutation({
     mutationFn: async () => {
@@ -59,10 +59,22 @@ export function TopBar({ user }: TopBarProps) {
               >
                 {t("nav.projects")}
               </Link>
-              <span className="hidden opacity-40 sm:inline">|</span>
-              <FeedbackButton />
             </>
           ) : null}
+          <span className="hidden opacity-40 sm:inline">|</span>
+          <Link
+            // `from` tells the team which page the feedback was about.
+            href={
+              pathname === "/feedback"
+                ? "/feedback"
+                : { pathname: "/feedback", query: { from: pathname } }
+            }
+            aria-label={t("feedback.navLabel")}
+            className="flex items-center gap-1 transition-opacity hover:opacity-80"
+          >
+            <MessageSquareText className="h-4 w-4" />
+            <span className="hidden sm:inline">{t("feedback.button")}</span>
+          </Link>
           <span className="hidden opacity-40 sm:inline">|</span>
           <LanguageSwitcher />
           <span className="hidden opacity-40 sm:inline">|</span>

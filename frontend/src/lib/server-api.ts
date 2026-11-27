@@ -5,6 +5,7 @@ import { getLocale } from "next-intl/server";
 import { cache } from "react";
 
 import { redirect } from "@/i18n/navigation";
+import { EMPTY_FEEDBACK_PAGE, type FeedbackPage } from "@/lib/feedback";
 import type { VaultPriceFilter, VaultSort } from "@/lib/vault";
 
 const BACKEND = process.env.BACKEND_INTERNAL_URL ?? "http://backend:8000";
@@ -206,4 +207,21 @@ export async function getServerProjectFile(
   const res = await backendFetch(`/projects/${projectId}/files/${fileId}`);
   if (!res.ok) return null;
   return res.json();
+}
+
+// Public feedback wall. Never throws: an unreachable backend renders an
+// empty wall instead of an error page.
+export async function listFeedback(
+  params: { limit?: number; offset?: number } = {},
+): Promise<FeedbackPage> {
+  const qs = new URLSearchParams();
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.offset) qs.set("offset", String(params.offset));
+  try {
+    const res = await backendFetch(`/feedback?${qs.toString()}`);
+    if (!res.ok) return EMPTY_FEEDBACK_PAGE;
+    return res.json();
+  } catch {
+    return EMPTY_FEEDBACK_PAGE;
+  }
 }

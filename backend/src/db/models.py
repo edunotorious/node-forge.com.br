@@ -353,9 +353,9 @@ class VaultComment(Base):
 
 
 class Feedback(Base):
-    """In-app feedback (the "Feedback" button). Collected during usability
-    tests and afterwards; read with SQL, there is no admin UI. The user is
-    kept nullable so deleting an account keeps the anonymous feedback."""
+    """In-app feedback, public on the /feedback community page. The user is
+    kept nullable so deleting an account keeps the (then anonymous)
+    feedback; `anonymous` hides the author on the public page by choice."""
 
     __tablename__ = "feedback"
     __table_args__ = (
@@ -374,6 +374,9 @@ class Feedback(Base):
     # Path of the page the user was on (e.g. /projects/<id>), to place the
     # feedback in context. Never a full URL with query strings.
     page: Mapped[str] = mapped_column(String(200), nullable=False, server_default="")
+    anonymous: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+    author: Mapped["User | None"] = relationship("User", foreign_keys=[user_id])
